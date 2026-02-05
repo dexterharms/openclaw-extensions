@@ -219,12 +219,12 @@
         "properties": {
           "enabled": {
             "type": "boolean",
-            "default": false,
+            "default": true,
             "description": "Enable background email scanning"
           },
           "pollInterval": {
             "type": "number",
-            "default": 30000,
+            "default": 60000,
             "description": "Poll interval in milliseconds"
           },
           "useIdle": {

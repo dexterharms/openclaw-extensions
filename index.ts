@@ -3,6 +3,7 @@ import { SmtpClient } from "./src/smtp-client";
 import { SecurityScanner } from "./src/security-scanner";
 import { PluginConfig } from "./src/types";
 import { registerSafeMailTools, registerSecurityTools } from "./src/tools";
+import { registerBackgroundService } from "./src/background-service";
 
 export default function register(api: any, config: PluginConfig) {
   const imapClient = new ImapClient(config.imap);
@@ -11,6 +12,7 @@ export default function register(api: any, config: PluginConfig) {
 
   registerSafeMailTools(api, config, imapClient, smtpClient);
   registerSecurityTools(api, config, imapClient, securityScanner);
+  registerBackgroundService(api, config);
 
   api.logger.info("mail-access plugin loaded");
 

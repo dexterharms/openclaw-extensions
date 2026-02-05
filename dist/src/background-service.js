@@ -1,48 +1,48 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BackgroundService = void 0;
+exports.registerBackgroundService = registerBackgroundService;
 const imap_client_1 = require("./imap-client");
-const security_scanner_1 = require("./security-scanner");
 class BackgroundService {
+    api;
     config;
     imapClient;
-    securityScanner;
     intervalId = null;
     isRunning = false;
     lastCheckTime = null;
-    constructor(config) {
+    constructor(api, config) {
+        this.api = api;
         this.config = config;
         this.imapClient = new imap_client_1.ImapClient(this.config.imap);
-        this.securityScanner = new security_scanner_1.SecurityScanner(this.config.security);
     }
     async start() {
         if (this.isRunning) {
-            console.warn("Background service already running");
+            this.api.logger.warn("Background service already running");
             return;
         }
-        console.log("Starting background service");
+        this.api.logger.info("Starting mail-access background service");
         try {
             await this.imapClient.connect();
             await this.scanNewMessages();
             this.isRunning = true;
-            const pollInterval = this.config.listener?.pollInterval || 30000;
-            console.log(`Starting poll interval: ${pollInterval}ms`);
+            const pollInterval = this.config.listener?.pollInterval || 60000;
+            this.api.logger.info(`Starting poll interval: ${pollInterval}ms`);
             this.intervalId = setInterval(async () => {
                 try {
                     await this.scanNewMessages();
                 }
                 catch (error) {
-                    console.error("Error during background scan:", error);
+                    this.api.logger.error("Error during background scan:", error);
                 }
             }, pollInterval);
         }
         catch (error) {
-            console.error("Failed to start background service:", error);
+            this.api.logger.error("Failed to start background service:", error);
             throw error;
         }
     }
     async stop() {
-        console.log("Stopping background service");
+        this.api.logger.info("Stopping mail-access background service");
         if (this.intervalId) {
             clearInterval(this.intervalId);
             this.intervalId = null;
@@ -52,39 +52,50 @@ class BackgroundService {
             await this.imapClient.disconnect();
         }
         catch (error) {
-            console.error("Error during disconnect:", error);
+            this.api.logger.error("Error during disconnect:", error);
         }
     }
     async scanNewMessages() {
         const inboxFolder = this.config.folders?.inbox || "INBOX";
-        const quarantineFolder = this.config.folders?.quarantine || "quarantine";
         await this.imapClient.selectFolder(inboxFolder);
         const newMessages = await this.imapClient.getMessages({
             count: 50,
             filter: "unread",
         });
-        console.log(`Found ${newMessages.length} new messages`);
-        for (const message of newMessages) {
-            const analysis = this.securityScanner.analyzeMessage(message);
-            console.log(`Analyzing message ${message.id}: ${analysis.level}`);
-            console.log(`Phishing score: ${analysis.phishingScore}/10`);
-            console.log(`Threats:`, analysis.reasons);
-            if (analysis.level === "dangerous") {
-                console.log(`High threat detected - moving to quarantine`);
-                await this.imapClient.moveMessage(message.id, quarantineFolder);
-            }
-            else if (analysis.level === "suspicious" && analysis.phishingScore >= 5) {
-                console.log(`Moving suspicious message to quarantine`);
-                await this.imapClient.moveMessage(message.id, quarantineFolder);
-            }
-            else if (analysis.level === "suspicious") {
-                console.log(`Moving suspicious message to safe folder`);
-                const safeInbox = this.config.folders?.safeInbox || "safe";
-                await this.imapClient.moveMessage(message.id, safeInbox);
-            }
+        this.api.logger.info(`Found ${newMessages.length} new messages`);
+        if (newMessages.length > 0) {
+            this.api.logger.info("Triggering security agent to scan new messages");
+            await this.triggerSecurityAgent(newMessages.length);
         }
         this.lastCheckTime = new Date();
-        console.log("Background scan completed");
+        this.api.logger.info("Background scan completed");
+    }
+    async triggerSecurityAgent(messageCount) {
+        try {
+            if (typeof this.api.sessions_send === "function") {
+                this.api.logger.info("Using sessions_send to trigger security agent");
+                await this.api.sessions_send({
+                    agent: "security-agent",
+                    message: `New email detected: ${messageCount} message(s). Scan INBOX for threats using mail_security_scan_mail.`
+                });
+                return;
+            }
+            if (typeof this.api.rpc === "function") {
+                this.api.logger.info("Using Gateway RPC to trigger security agent");
+                await this.api.rpc({
+                    method: "sessions_send",
+                    params: {
+                        agent: "security-agent",
+                        message: `New email detected: ${messageCount} message(s). Scan INBOX for threats.`
+                    }
+                });
+                return;
+            }
+            this.api.logger.warn("No sessions_send or RPC method available. New messages detected but not triggering security agent automatically.");
+        }
+        catch (error) {
+            this.api.logger.error("Failed to trigger security agent:", error);
+        }
     }
     async getRecentMessages(hours = 24) {
         if (!this.isRunning) {
@@ -100,7 +111,7 @@ class BackgroundService {
     }
     async getScannedMessages() {
         const messages = await this.getRecentMessages(24);
-        return this.securityScanner.getScannedMessages(messages);
+        return messages;
     }
     async getStatus() {
         if (!this.isRunning) {
@@ -122,4 +133,21 @@ class BackgroundService {
     }
 }
 exports.BackgroundService = BackgroundService;
+function registerBackgroundService(api, config) {
+    const service = new BackgroundService(api, config);
+    api.registerService({
+        id: "mail-access-listener",
+        name: "Mail Access IMAP Listener",
+        description: "Polls IMAP for new messages and triggers security agent",
+        start: async () => {
+            api.logger.info("Starting mail-access background service");
+            await service.start();
+        },
+        stop: async () => {
+            api.logger.info("Stopping mail-access background service");
+            await service.stop();
+        },
+    });
+    return service;
+}
 //# sourceMappingURL=background-service.js.map
