@@ -175,6 +175,7 @@ export function registerSafeMailTools(api: any, config: any, imapClient: ImapCli
         api.logger.info(`Reading mail message with ID: ${params.id}`);
 
         const folder = params.folder || safeInboxFolder;
+        await imapClient.selectFolder(folder);
         const message = await imapClient.getMessage(params.id);
 
         const result = {
@@ -221,6 +222,7 @@ export function registerSafeMailTools(api: any, config: any, imapClient: ImapCli
         api.logger.info(`Replying to message with ID: ${params.id}`);
 
         const folder = params.folder || safeInboxFolder;
+        await imapClient.selectFolder(folder);
         const message = await imapClient.getMessage(params.id);
 
         const quotedContent = params.quoteOriginal
@@ -270,6 +272,7 @@ export function registerSafeMailTools(api: any, config: any, imapClient: ImapCli
         api.logger.info(`Forwarding message with ID: ${params.id} to ${params.toRecipients.join(", ")}`);
 
         const folder = params.folder || safeInboxFolder;
+        await imapClient.selectFolder(folder);
         const message = await imapClient.getMessage(params.id);
 
         const forwardContent = params.content || `\n\n--- Forwarded Message ---\nFrom: ${message.from}\nDate: ${message.date.toISOString()}\nSubject: ${message.subject}\n\n${message.body}`;
