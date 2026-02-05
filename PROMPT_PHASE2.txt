@@ -1,0 +1,101 @@
+# Phase 2 Completion: Register Safe Mail Tools
+
+## Context
+
+You are completing Phase 2 of the mail-access plugin. The tool schemas and implementations already exist in `src/tools.ts`:
+- All 7 tool parameter and result schemas
+- All 7 tool implementations (get_mail, read_mail, reply, forward, send_mail, archive, move)
+- `registerSafeMailTools()` function that registers all tools
+
+**However, these tools are NOT yet registered in the plugin!** The `index.ts` file only creates the clients but doesn't call `registerSafeMailTools()`.
+
+## Task: Update index.ts to Register Tools
+
+1. **Import `registerSafeMailTools`** from `./src/tools.ts` in `index.ts`
+2. **Call `registerSafeMailTools()`** with the correct parameters:
+   - `api` — the plugin API
+   - `config` — the plugin configuration
+   - `imapClient` — the IMAP client instance
+   - `smtpClient` — the SMTP client instance
+
+3. **Build TypeScript** to verify compilation: `npm run build`
+
+## Current index.ts
+
+```typescript
+import { ImapClient } from "./src/imap-client";
+import { SmtpClient } from "./src/smtp-client";
+import { SecurityScanner } from "./src/security-scanner";
+import { PluginConfig } from "./src/types";
+
+export default function register(api: any, config: PluginConfig) {
+  const imapClient = new ImapClient(config.imap);
+  const smtpClient = new SmtpClient(config.smtp);
+  const securityScanner = new SecurityScanner(config.security);
+
+  api.logger.info("mail-access plugin loaded");
+
+  return {
+    api,
+    config,
+    imapClient,
+    smtpClient,
+    securityScanner,
+  };
+}
+```
+
+## Expected index.ts After Changes
+
+```typescript
+import { ImapClient } from "./src/imap-client";
+import { SmtpClient } from "./src/smtp-client";
+import { SecurityScanner } from "./src/security-scanner";
+import { PluginConfig } from "./src/types";
+import { registerSafeMailTools } from "./src/tools";
+
+export default function register(api: any, config: PluginConfig) {
+  const imapClient = new ImapClient(config.imap);
+  const smtpClient = new SmtpClient(config.smtp);
+  const securityScanner = new SecurityScanner(config.security);
+
+  // Register safe mail tools
+  registerSafeMailTools(api, config, imapClient, smtpClient);
+
+  api.logger.info("mail-access plugin loaded");
+
+  return {
+    api,
+    config,
+    imapClient,
+    smtpClient,
+    securityScanner,
+  };
+}
+```
+
+## Verification Steps
+
+After updating index.ts:
+
+1. **Build TypeScript:**
+   ```bash
+   npm run build
+   ```
+
+2. **Check for compilation errors:**
+   - If TypeScript errors occur, fix them
+   - The build should complete without errors
+
+3. **Commit the changes:**
+   ```bash
+   git add .
+   git commit -m "Phase 2 complete: Safe mail tools registered in plugin"
+   ```
+
+## Notes
+
+- The tool implementations in `src/tools.ts` are already complete
+- You only need to import and call `registerSafeMailTools()`
+- Make sure the import path is correct (`./src/tools`)
+- The function expects 4 parameters: api, config, imapClient, smtpClient
