@@ -1,0 +1,234 @@
+# Phase 3: Security Tools (Optional, Security Agent Only)
+
+## Context
+
+You are building Phase 3 of the mail-access plugin. Phase 1 skeleton and Phase 2 safe mail tools are complete.
+
+**Critical Security Note:** These tools operate on UNVERIFIED messages (INBOX folder) and should ONLY be available to the isolated security agent.
+
+## Task: Register Security Tools
+
+Create a new file `src/security-tools.ts` (or add to existing `src/tools.ts`) with the following security tools:
+
+1. `mail_security_scan_mail` — Scan unverified messages in INBOX for security threats
+2. `mail_security_mark_safe` — Mark a message as safe (move to Safe-Inbox)
+3. `mail_security_quarantine` — Quarantine a message (move to Quarantine folder)
+4. `mail_security_trash` — Move a message to Trash
+5. `mail_security_finish_check` — Complete mail security check and alert main agent
+
+## Tool Requirements
+
+### 1. `mail_security_scan_mail`
+
+**Parameters:**
+```typescript
+{
+  scanAll?: boolean;  // Scan all messages (default: false, only UNSEEN)
+}
+```
+
+**Returns:**
+```typescript
+{
+  scanned: number;
+  messages: Array<{
+    id: string;
+    from: string;
+    subject: string;
+    date: string;
+    preview: string;
+    threatFlags: {
+      level: "safe" | "suspicious" | "dangerous";
+      reasons: string[];
+      phishingScore: number;  // 0-10
+      attachmentThreats: string[];
+      linkThreats: string[];
+      senderReputation: "known" | "unknown" | "suspicious";
+    };
+  }>;
+}
+```
+
+**Implementation:**
+- Use ImapClient to get messages from INBOX folder (NOT Safe-Inbox)
+- Use SecurityScanner to analyze each message
+- Return threat flags (no full message content exposure)
+- Scan only UNSEEN messages by default
+
+---
+
+### 2. `mail_security_mark_safe`
+
+**Parameters:**
+```typescript
+{
+  id: string;  // Message ID
+}
+```
+
+**Returns:**
+```typescript
+{
+  success: boolean;
+  moved: boolean;
+  destination: string;
+}
+```
+
+**Implementation:**
+- Move message from INBOX to Safe-Inbox folder
+- Use ImapClient's moveMessage or copy + delete
+
+---
+
+### 3. `mail_security_quarantine`
+
+**Parameters:**
+```typescript
+{
+  id: string;           // Message ID
+  reason?: string;      // Reason for quarantine (for logging)
+}
+```
+
+**Returns:**
+```typescript
+{
+  success: boolean;
+  moved: boolean;
+  destination: string;
+  quarantineId: string;  // For reference
+}
+```
+
+**Implementation:**
+- Move message from INBOX to Quarantine folder
+- Use ImapClient's moveMessage
+
+---
+
+### 4. `mail_security_trash`
+
+**Parameters:**
+```typescript
+{
+  id: string;  // Message ID
+}
+```
+
+**Returns:**
+```typescript
+{
+  success: boolean;
+  moved: boolean;
+  destination: string;
+}
+```
+
+**Implementation:**
+- Move message from INBOX to Trash folder
+- Use ImapClient's moveMessage
+
+---
+
+### 5. `mail_security_finish_check`
+
+**Parameters:**
+```typescript
+{
+  scanSummary: {
+    scanned: number;
+    safe: number;
+    quarantined: number;
+    spam: number;
+    trash: number;
+  };
+  quarantinedMessages?: Array<{
+    id: string;
+    from: string;
+    subject: string;
+    threatLevel: string;
+  }>;
+  sendReport?: boolean;  // Send email report (default: true if quarantined)
+}
+```
+
+**Returns:**
+```typescript
+{
+  success: boolean;
+  alerted: boolean;
+  reportSent?: boolean;
+}
+```
+
+**Implementation:**
+- For now: Just log and return success (alerting via sessions_send will be Phase 4)
+- Could send quarantine report via SMTP client (optional)
+
+---
+
+## Critical: Register as Optional Tools
+
+**MUST use `{ optional: true }`** when registering security tools:
+
+```typescript
+api.registerTool({
+  name: "mail_security_scan_mail",
+  description: "Scan unverified messages in INBOX for security threats",
+  parameters: ScanMailParamsSchema,
+  handler: async (params) => { /* ... */ }
+}, { optional: true });  // ← CRITICAL: optional tool!
+```
+
+Do this for ALL 5 security tools.
+
+---
+
+## Implementation Steps
+
+1. **Create or extend tools file:**
+   - Option A: Create new `src/security-tools.ts`
+   - Option B: Add to existing `src/tools.ts` (rename function to `registerAllTools`)
+
+2. **Define tool schemas** using Type.Object(), Type.String(), Type.Union(), etc.
+3. **Implement handlers:**
+   - Use `imapClient` for IMAP operations
+   - Use `securityScanner` for threat detection
+   - Use `config.folders` for folder paths (inbox, safeInbox, quarantine, spam, trash)
+   - Handle errors with try/catch
+   - Return tool responses in correct format
+
+4. **Export registration function:**
+   ```typescript
+   export function registerSecurityTools(api: any, config: any, imapClient: ImapClient, securityScanner: SecurityScanner) {
+     // Register all 5 security tools with { optional: true }
+   }
+   ```
+
+5. **Update index.ts:**
+   - Import `registerSecurityTools` from tools file
+   - Call it after safe mail tools: `registerSecurityTools(api, config, imapClient, securityScanner);`
+
+6. **Build TypeScript:** `npm run build` to verify compilation
+
+7. **Commit changes:**
+   ```bash
+   git add .
+   git commit -m "Phase 3 complete: Security tools registered (optional, security agent only)"
+   ```
+
+## Notes
+
+- Security tools operate on INBOX folder (unverified messages)
+- Safe mail tools operate on Safe-Inbox folder (verified messages)
+- Security tools MUST be registered with `{ optional: true }`
+- Security tools should NOT return full message content (only metadata + threat flags)
+- Use the existing SecurityScanner class from Phase 1 for threat detection
+
+## Testing
+
+After implementation:
+- Verify tools are registered
+- Verify TypeScript compiles without errors
+- Tools will be tested when security agent configuration is set up (Phase 5)

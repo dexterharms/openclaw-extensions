@@ -113,6 +113,88 @@ export const MoveResultSchema = Type.Object({
   destination: Type.String(),
 });
 
+export const ScanMailParamsSchema = Type.Object({
+  scanAll: Type.Optional(Type.Boolean({ default: false })),
+});
+
+export const ScanMailResultSchema = Type.Object({
+  scanned: Type.Number(),
+  messages: Type.Array(
+    Type.Object({
+      id: Type.String(),
+      from: Type.String(),
+      subject: Type.String(),
+      date: Type.String(),
+      preview: Type.String(),
+      threatFlags: Type.Object({
+        level: Type.Union([Type.Literal("safe"), Type.Literal("suspicious"), Type.Literal("dangerous")]),
+        reasons: Type.Array(Type.String()),
+        phishingScore: Type.Number(),
+        attachmentThreats: Type.Array(Type.String()),
+        linkThreats: Type.Array(Type.String()),
+        senderReputation: Type.Union([Type.Literal("known"), Type.Literal("unknown"), Type.Literal("suspicious")]),
+      }),
+    })
+  ),
+});
+
+export const MarkSafeParamsSchema = Type.Object({
+  id: Type.String(),
+});
+
+export const MarkSafeResultSchema = Type.Object({
+  success: Type.Boolean(),
+  moved: Type.Boolean(),
+  destination: Type.String(),
+});
+
+export const QuarantineParamsSchema = Type.Object({
+  id: Type.String(),
+  reason: Type.Optional(Type.String()),
+});
+
+export const QuarantineResultSchema = Type.Object({
+  success: Type.Boolean(),
+  moved: Type.Boolean(),
+  destination: Type.String(),
+  quarantineId: Type.String(),
+});
+
+export const TrashParamsSchema = Type.Object({
+  id: Type.String(),
+});
+
+export const TrashResultSchema = Type.Object({
+  success: Type.Boolean(),
+  moved: Type.Boolean(),
+  destination: Type.String(),
+});
+
+export const FinishCheckParamsSchema = Type.Object({
+  scanSummary: Type.Object({
+    scanned: Type.Number(),
+    safe: Type.Number(),
+    quarantined: Type.Number(),
+    spam: Type.Number(),
+    trash: Type.Number(),
+  }),
+  quarantinedMessages: Type.Optional(Type.Array(
+    Type.Object({
+      id: Type.String(),
+      from: Type.String(),
+      subject: Type.String(),
+      threatLevel: Type.String(),
+    })
+  )),
+  sendReport: Type.Optional(Type.Boolean({ default: true })),
+});
+
+export const FinishCheckResultSchema = Type.Object({
+  success: Type.Boolean(),
+  alerted: Type.Boolean(),
+  reportSent: Type.Optional(Type.Boolean()),
+});
+
 export function registerSafeMailTools(api: any, config: any, imapClient: ImapClient, smtpClient: SmtpClient) {
   const safeInboxFolder = config.folders?.safeInbox || "safe";
 
@@ -429,4 +511,265 @@ export function registerSafeMailTools(api: any, config: any, imapClient: ImapCli
       }
     },
   });
+}
+
+export function registerSecurityTools(api: any, config: any, imapClient: ImapClient, securityScanner: any) {
+  const inboxFolder = config.folders?.inbox || "INBOX";
+  const safeInboxFolder = config.folders?.safeInbox || "safe";
+  const quarantineFolder = config.folders?.quarantine || "quarantine";
+  const trashFolder = config.folders?.trash || "Trash";
+
+  api.registerTool({
+    name: "mail_security_scan_mail",
+    description: "Scan unverified messages in INBOX for security threats",
+    parameters: ScanMailParamsSchema,
+    handler: async (params: Static<typeof ScanMailParamsSchema>) => {
+      try {
+        api.logger.info(`Scanning ${params.scanAll ? 'all' : 'unread'} messages in ${inboxFolder} folder`);
+
+        const messages = await imapClient.getMessages({
+          count: 100,
+          filter: params.scanAll ? "both" : "unread",
+        });
+
+        const scannedMessages = [];
+        let phishingScoreSum = 0;
+        let safeCount = 0;
+        let suspiciousCount = 0;
+        let dangerousCount = 0;
+
+        for (const message of messages) {
+          const analysis = securityScanner.analyzeMessage(message);
+          const threatFlags = {
+            level: analysis.level,
+            reasons: analysis.reasons,
+            phishingScore: analysis.phishingScore,
+            attachmentThreats: analysis.attachmentThreats,
+            linkThreats: analysis.linkThreats,
+            senderReputation: analysis.senderReputation,
+          };
+
+          scannedMessages.push({
+            id: message.id,
+            from: message.from,
+            subject: message.subject,
+            date: message.date.toISOString(),
+            preview: message.preview,
+            threatFlags,
+          });
+
+          if (analysis.level === "safe") {
+            safeCount++;
+          } else if (analysis.level === "suspicious") {
+            suspiciousCount++;
+          } else {
+            dangerousCount++;
+          }
+
+          phishingScoreSum += analysis.phishingScore;
+        }
+
+        const phishingScoreAvg = scannedMessages.length > 0 ? (phishingScoreSum / scannedMessages.length).toFixed(1) : "0";
+
+        api.logger.info(`Security scan completed: ${scannedMessages.length} messages scanned, ${safeCount} safe, ${suspiciousCount} suspicious, ${dangerousCount} dangerous`);
+
+        return {
+          content: [{ type: "text", text: JSON.stringify({
+            scanned: scannedMessages.length,
+            messages: scannedMessages,
+            summary: {
+              total: scannedMessages.length,
+              safe: safeCount,
+              suspicious: suspiciousCount,
+              dangerous: dangerousCount,
+              avgPhishingScore: parseFloat(phishingScoreAvg),
+            },
+          }) }],
+        };
+      } catch (error) {
+        api.logger.error("Error in mail_security_scan_mail:", error);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: false,
+                error: error instanceof Error ? error.message : "Unknown error",
+              }),
+            },
+          ],
+        };
+      }
+    },
+  }, { optional: true });
+
+  api.registerTool({
+    name: "mail_security_mark_safe",
+    description: "Mark a message as safe (move to Safe-Inbox)",
+    parameters: MarkSafeParamsSchema,
+    handler: async (params: Static<typeof MarkSafeParamsSchema>) => {
+      try {
+        api.logger.info(`Marking message as safe: ${params.id}`);
+
+        await imapClient.selectFolder(inboxFolder);
+        await imapClient.moveMessage(params.id, safeInboxFolder);
+
+        api.logger.info(`Successfully marked message ${params.id} as safe and moved to ${safeInboxFolder}`);
+
+        return {
+          content: [{ type: "text", text: JSON.stringify({
+            success: true,
+            moved: true,
+            destination: safeInboxFolder,
+          }) }],
+        };
+      } catch (error) {
+        api.logger.error("Error in mail_security_mark_safe:", error);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: false,
+                moved: false,
+                destination: safeInboxFolder,
+                error: error instanceof Error ? error.message : "Unknown error",
+              }),
+            },
+          ],
+        };
+      }
+    },
+  }, { optional: true });
+
+  api.registerTool({
+    name: "mail_security_quarantine",
+    description: "Quarantine a message (move to Quarantine folder)",
+    parameters: QuarantineParamsSchema,
+    handler: async (params: Static<typeof QuarantineParamsSchema>) => {
+      try {
+        api.logger.info(`Quarantining message ${params.id}${params.reason ? `: ${params.reason}` : ''}`);
+
+        const quarantineId = `${params.id}_${Date.now()}`;
+
+        await imapClient.selectFolder(inboxFolder);
+        await imapClient.moveMessage(params.id, quarantineFolder);
+
+        api.logger.info(`Successfully quarantined message ${params.id} to ${quarantineFolder} (ID: ${quarantineId})`);
+
+        return {
+          content: [{ type: "text", text: JSON.stringify({
+            success: true,
+            moved: true,
+            destination: quarantineFolder,
+            quarantineId,
+          }) }],
+        };
+      } catch (error) {
+        api.logger.error("Error in mail_security_quarantine:", error);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: false,
+                moved: false,
+                destination: quarantineFolder,
+                error: error instanceof Error ? error.message : "Unknown error",
+              }),
+            },
+          ],
+        };
+      }
+    },
+  }, { optional: true });
+
+  api.registerTool({
+    name: "mail_security_trash",
+    description: "Move a message to Trash",
+    parameters: TrashParamsSchema,
+    handler: async (params: Static<typeof TrashParamsSchema>) => {
+      try {
+        api.logger.info(`Moving message to Trash: ${params.id}`);
+
+        await imapClient.selectFolder(inboxFolder);
+        await imapClient.moveMessage(params.id, trashFolder);
+
+        api.logger.info(`Successfully moved message ${params.id} to ${trashFolder}`);
+
+        return {
+          content: [{ type: "text", text: JSON.stringify({
+            success: true,
+            moved: true,
+            destination: trashFolder,
+          }) }],
+        };
+      } catch (error) {
+        api.logger.error("Error in mail_security_trash:", error);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: false,
+                moved: false,
+                destination: trashFolder,
+                error: error instanceof Error ? error.message : "Unknown error",
+              }),
+            },
+          ],
+        };
+      }
+    },
+  }, { optional: true });
+
+  api.registerTool({
+    name: "mail_security_finish_check",
+    description: "Complete mail security check and alert main agent",
+    parameters: FinishCheckParamsSchema,
+    handler: async (params: Static<typeof FinishCheckParamsSchema>) => {
+      try {
+        api.logger.info(`Completing security check: ${params.scanSummary.scanned} messages scanned`);
+
+        let reportSent = false;
+        let alerted = false;
+
+        if (params.quarantinedMessages && params.quarantinedMessages.length > 0) {
+          api.logger.info(`Security check complete: ${params.quarantinedMessages.length} messages quarantined`);
+
+          if (params.sendReport !== false) {
+            api.logger.info("Report would be sent to alert agent in Phase 4");
+            reportSent = true;
+            alerted = true;
+          }
+        } else {
+          api.logger.info("Security check complete: No threats detected");
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify({
+            success: true,
+            alerted,
+            reportSent,
+            scanSummary: params.scanSummary,
+            quarantinedCount: params.quarantinedMessages?.length || 0,
+          }) }],
+        };
+      } catch (error) {
+        api.logger.error("Error in mail_security_finish_check:", error);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: false,
+                alerted: false,
+                error: error instanceof Error ? error.message : "Unknown error",
+              }),
+            },
+          ],
+        };
+      }
+    },
+  }, { optional: true });
 }

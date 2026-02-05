@@ -1,0 +1,76 @@
+# Fix TypeScript Compilation Errors
+
+## Context
+
+Phase 2 tools have been registered, but TypeScript compilation fails with 3 errors about unused `folder` variables in `src/tools.ts`.
+
+## Errors
+
+```
+src/tools.ts(177,15): error TS6133: 'folder' is declared but its value is never read.
+src/tools.ts(223,15): error TS6133: 'folder' is declared but its value is never read.
+src/tools.ts(272,15): error TS6133: 'folder' is declared but its value is never read.
+```
+
+## Issue
+
+In three tool handlers, the `folder` variable is calculated but never used:
+1. `mail_access_read_mail` (line ~177)
+2. `mail_access_reply` (line ~223)
+3. `mail_access_forward` (line ~272)
+
+The code looks like:
+```typescript
+const folder = params.folder || safeInboxFolder;
+const message = await imapClient.getMessage(params.id);
+```
+
+The `folder` variable is not passed to `imapClient.getMessage()`, so it's never used.
+
+## Task: Fix the Errors
+
+You have two options:
+
+**Option A: Use the folder parameter (Recommended)**
+- Select the folder before fetching the message
+- This allows users to read/reply/forward messages from different folders
+- Add `await imapClient.selectFolder(folder);` before `getMessage()`
+
+**Option B: Remove unused variable**
+- Remove the `folder` variable declarations
+- Document that these tools only operate on the currently selected folder
+
+I recommend **Option A** for flexibility.
+
+## Example Fix (Option A)
+
+For `mail_access_read_mail`:
+```typescript
+handler: async (params: Static<typeof ReadMailParamsSchema>) => {
+  try {
+    api.logger.info(`Reading mail message with ID: ${params.id}`);
+
+    // FIX: Select the folder first
+    const folder = params.folder || safeInboxFolder;
+    await imapClient.selectFolder(folder);
+    const message = await imapClient.getMessage(params.id);
+
+    // ... rest of handler
+  }
+}
+```
+
+Do the same for `mail_access_reply` and `mail_access_forward`.
+
+## Verification
+
+After fixing:
+1. Run `npm run build` to verify TypeScript compiles without errors
+2. Commit the fix: `git commit -m "Fix TypeScript compilation errors - use folder parameter in tool handlers"`
+
+## Notes
+
+- Don't modify the parameter schemas
+- Don't modify the tool names or descriptions
+- Just add the folder selection before getMessage calls
+- The `folder` variable should now be used

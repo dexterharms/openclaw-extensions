@@ -90,5 +90,74 @@ export declare const MoveResultSchema: import("@sinclair/typebox").TObject<{
     moved: import("@sinclair/typebox").TBoolean;
     destination: import("@sinclair/typebox").TString;
 }>;
+export declare const ScanMailParamsSchema: import("@sinclair/typebox").TObject<{
+    scanAll: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TBoolean>;
+}>;
+export declare const ScanMailResultSchema: import("@sinclair/typebox").TObject<{
+    scanned: import("@sinclair/typebox").TNumber;
+    messages: import("@sinclair/typebox").TArray<import("@sinclair/typebox").TObject<{
+        id: import("@sinclair/typebox").TString;
+        from: import("@sinclair/typebox").TString;
+        subject: import("@sinclair/typebox").TString;
+        date: import("@sinclair/typebox").TString;
+        preview: import("@sinclair/typebox").TString;
+        threatFlags: import("@sinclair/typebox").TObject<{
+            level: import("@sinclair/typebox").TUnion<[import("@sinclair/typebox").TLiteral<"safe">, import("@sinclair/typebox").TLiteral<"suspicious">, import("@sinclair/typebox").TLiteral<"dangerous">]>;
+            reasons: import("@sinclair/typebox").TArray<import("@sinclair/typebox").TString>;
+            phishingScore: import("@sinclair/typebox").TNumber;
+            attachmentThreats: import("@sinclair/typebox").TArray<import("@sinclair/typebox").TString>;
+            linkThreats: import("@sinclair/typebox").TArray<import("@sinclair/typebox").TString>;
+            senderReputation: import("@sinclair/typebox").TUnion<[import("@sinclair/typebox").TLiteral<"known">, import("@sinclair/typebox").TLiteral<"unknown">, import("@sinclair/typebox").TLiteral<"suspicious">]>;
+        }>;
+    }>>;
+}>;
+export declare const MarkSafeParamsSchema: import("@sinclair/typebox").TObject<{
+    id: import("@sinclair/typebox").TString;
+}>;
+export declare const MarkSafeResultSchema: import("@sinclair/typebox").TObject<{
+    success: import("@sinclair/typebox").TBoolean;
+    moved: import("@sinclair/typebox").TBoolean;
+    destination: import("@sinclair/typebox").TString;
+}>;
+export declare const QuarantineParamsSchema: import("@sinclair/typebox").TObject<{
+    id: import("@sinclair/typebox").TString;
+    reason: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
+}>;
+export declare const QuarantineResultSchema: import("@sinclair/typebox").TObject<{
+    success: import("@sinclair/typebox").TBoolean;
+    moved: import("@sinclair/typebox").TBoolean;
+    destination: import("@sinclair/typebox").TString;
+    quarantineId: import("@sinclair/typebox").TString;
+}>;
+export declare const TrashParamsSchema: import("@sinclair/typebox").TObject<{
+    id: import("@sinclair/typebox").TString;
+}>;
+export declare const TrashResultSchema: import("@sinclair/typebox").TObject<{
+    success: import("@sinclair/typebox").TBoolean;
+    moved: import("@sinclair/typebox").TBoolean;
+    destination: import("@sinclair/typebox").TString;
+}>;
+export declare const FinishCheckParamsSchema: import("@sinclair/typebox").TObject<{
+    scanSummary: import("@sinclair/typebox").TObject<{
+        scanned: import("@sinclair/typebox").TNumber;
+        safe: import("@sinclair/typebox").TNumber;
+        quarantined: import("@sinclair/typebox").TNumber;
+        spam: import("@sinclair/typebox").TNumber;
+        trash: import("@sinclair/typebox").TNumber;
+    }>;
+    quarantinedMessages: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TArray<import("@sinclair/typebox").TObject<{
+        id: import("@sinclair/typebox").TString;
+        from: import("@sinclair/typebox").TString;
+        subject: import("@sinclair/typebox").TString;
+        threatLevel: import("@sinclair/typebox").TString;
+    }>>>;
+    sendReport: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TBoolean>;
+}>;
+export declare const FinishCheckResultSchema: import("@sinclair/typebox").TObject<{
+    success: import("@sinclair/typebox").TBoolean;
+    alerted: import("@sinclair/typebox").TBoolean;
+    reportSent: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TBoolean>;
+}>;
 export declare function registerSafeMailTools(api: any, config: any, imapClient: ImapClient, smtpClient: SmtpClient): void;
+export declare function registerSecurityTools(api: any, config: any, imapClient: ImapClient, securityScanner: any): void;
 //# sourceMappingURL=tools.d.ts.map
