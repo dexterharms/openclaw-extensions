@@ -1,0 +1,220 @@
+# Phase 1: Mail Access Plugin Skeleton
+
+Build the foundation for a native OpenClaw plugin that provides secure email access with IMAP and SMTP clients.
+
+## Context
+
+You are building an OpenClaw plugin called "mail-access" that will replace Python scripts with TypeScript-based tools. The plugin will:
+
+1. Connect to ProtonMail Bridge via IMAP (127.0.0.1:1143, STARTTLS)
+2. Send emails via SMTP (127.0.0.1:1025, STARTTLS)
+3. Scan messages for security threats (phishing, attachments, links)
+4. Run as a background service for IMAP IDLE/polling
+
+## Requirements
+
+### Directory Structure
+
+Create this structure:
+```
+extensions/mail-access/
+├── index.ts                      # Plugin entry point
+├── openclaw.plugin.json          # Plugin manifest + config schema
+├── package.json                  # Dependencies
+├── tsconfig.json                 # TypeScript config
+├── src/
+│   ├── imap-client.ts            # IMAP connection management
+│   ├── smtp-client.ts            # SMTP connection management
+│   ├── security-scanner.ts      # Threat detection logic
+│   ├── background-service.ts     # IMAP IDLE listener (placeholder for now)
+│   └── types.ts                  # TypeScript types
+└── README.md                     # Documentation
+```
+
+### 1. IMAP Client (src/imap-client.ts)
+
+Use the `imapflow` library (modern, TypeScript-native).
+
+Implement:
+- `ImapClient` class with:
+  - `connect()` - Connect to IMAP with STARTTLS support
+  - `disconnect()` - Clean disconnect
+  - `selectFolder(folder)` - Select a folder
+  - `listFolders()` - List all folders
+  - `getMessages(opts)` - Get messages with pagination and filtering
+    - `opts.count`, `opts.offset`, `opts.searchPhrase`, `opts.filter` (unread/read/both)
+  - `getMessage(id)` - Get full message (headers + body)
+  - `moveMessage(id, destination)` - Move message to another folder
+  - `copyMessage(id, destination)` - Copy message to another folder
+  - `searchMessages(criteria)` - Search by criteria
+
+Connection config (from plugin config):
+```typescript
+{
+  host: string;       // "127.0.0.1"
+  port: number;       // 1143
+  user: string;       // "dexterharmshaus@proton.me"
+  password: string;   // from config
+  useStarttls: boolean;
+}
+```
+
+### 2. SMTP Client (src/smtp-client.ts)
+
+Use the `nodemailer` library.
+
+Implement:
+- `SmtpClient` class with:
+  - `connect()` - Connect to SMTP with STARTTLS support
+  - `disconnect()` - Clean disconnect
+  - `sendMail(mail)` - Send email
+  - `replyTo(messageId, content)` - Reply to a message
+  - `forwardMessage(messageId, toRecipients, content)` - Forward a message
+
+Connection config (from plugin config):
+```typescript
+{
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  useStarttls: boolean;
+  from: string;  // "dexter@harms.haus"
+}
+```
+
+Mail format:
+```typescript
+{
+  to: string | string[];
+  cc?: string | string[];
+  bcc?: string | string[];
+  subject: string;
+  text: string;  // plain text body
+  replyTo?: string;
+  inReplyTo?: string;
+  references?: string;
+}
+```
+
+### 3. Security Scanner (src/security-scanner.ts)
+
+Port the threat detection logic from the Python script.
+
+Implement:
+- `SecurityScanner` class with:
+  - `analyzeMessage(message)` - Analyze a message and return threat flags
+  - Configuration from plugin config (known senders, keywords, threats)
+
+Threat detection:
+- Known safe senders check
+- Critical threats (executable attachments: .exe, .scr, .bat, .js, .vbs, .ps1, .sh, .jar)
+- Phishing keywords (urgent, immediate action, verify account, password, security alert)
+- Suspicious links (URL shorteners, suspicious TLDs, IP addresses)
+- Attachment analysis (office docs, archives)
+- Credential requests (password, verify, account with click/update)
+
+Return type:
+```typescript
+{
+  level: "safe" | "suspicious" | "dangerous";
+  reasons: string[];
+  phishingScore: number;  // 0-10
+  attachmentThreats: string[];
+  linkThreats: string[];
+  senderReputation: "known" | "unknown" | "suspicious";
+}
+```
+
+### 4. Types (src/types.ts)
+
+Define all shared TypeScript types:
+- IMAP config, SMTP config, plugin config
+- Message types (header, body, attachment metadata)
+- Threat flag types
+- Security scanner types
+
+### 5. Plugin Entry Point (index.ts)
+
+Create the plugin skeleton (register tools and background service placeholder):
+
+```typescript
+export default function register(api: any) {
+  const config = api.pluginConfig;
+  
+  // TODO: Register IMAP and SMTP clients
+  // TODO: Register security scanner
+  // TODO: Register safe mail tools (Phase 2)
+  // TODO: Register security tools (Phase 3)
+  // TODO: Register background service (Phase 4)
+  
+  api.logger.info("mail-access plugin loaded");
+}
+```
+
+### 6. Plugin Manifest (openclaw.plugin.json)
+
+Create the manifest with:
+- Plugin ID: "mail-access"
+- Name: "Mail Access"
+- Description
+- Config schema with:
+  - IMAP config (host, port, user, password, useStarttls)
+  - SMTP config (host, port, user, password, useStarttls, from)
+  - Folders config (inbox, safeInbox, quarantine, spam, trash)
+  - Security config (knownSafeSenders array, criticalThreats array, phishingKeywords array)
+  - Listener config (enabled, pollInterval, useIdle)
+  - Notifications config (alertAgent, quarantineReportTo)
+- UI hints for sensitive fields (password, apiKey, etc.)
+
+Use @sinclair/typebox for config schema if needed.
+
+### 7. package.json
+
+Create package.json with:
+- Dependencies:
+  - `@sinclair/typebox` - JSON schema validation
+  - `imapflow` - IMAP client
+  - `nodemailer` - SMTP client
+- DevDependencies:
+  - `@types/node`
+  - `typescript`
+- Scripts:
+  - `build` - Compile TypeScript
+  - `dev` - Watch mode
+
+### 8. TypeScript Config (tsconfig.json)
+
+Standard TS config for Node.js.
+
+### 9. README.md
+
+Basic documentation:
+- Description
+- Installation
+- Configuration
+- Usage (placeholder - tools coming in Phase 2-5)
+
+## Implementation Notes
+
+- Use async/await throughout
+- Error handling with try/catch
+- Log errors with api.logger
+- Type safety with TypeScript
+- ProtonMail Bridge uses plain connection + STARTTLS (not SSL)
+
+## When Complete
+
+Run these commands to install dependencies and build:
+```bash
+npm install
+npm run build
+```
+
+Check for errors. The plugin should load without syntax errors.
+
+When done, report:
+- Files created
+- Dependencies installed
+- Build successful?
+- Any errors encountered

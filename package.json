@@ -1,0 +1,41 @@
+{
+  "id": "mail-access",
+  "name": "Mail Access",
+  "version": "1.0.0",
+  "description": "Secure email access plugin with IMAP, SMTP, and security scanning capabilities",
+  "author": "OpenClaw",
+  "license": "MIT",
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist/"
+  },
+  "keywords": [
+    "email",
+    "imap",
+    "smtp",
+    "security",
+    "phishing",
+    "protonmail",
+    "mail-access"
+  ],
+  "dependencies": {
+    "@sinclair/typebox": "^0.32.18",
+    "imapflow": "^1.0.153",
+    "nodemailer": "^6.9.13"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.16",
+    "@types/nodemailer": "^7.0.9",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anomalyco/opencode"
+  }
+}

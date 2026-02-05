@@ -1,0 +1,289 @@
+# Phase 2: Safe Mail Tools
+
+Register safe email tools for the main agent to use. These tools operate ONLY on pre-scanned messages (in Safe-Inbox folder) and never process unverified content.
+
+## Context
+
+You are building on the Phase 1 skeleton:
+- IMAP client (imap-client.ts) — ready to use
+- SMTP client (smtp-client.ts) — ready to use
+- Plugin config (openclaw.plugin.json) — configured
+- Types (types.ts) — defined
+
+## Task: Register Safe Mail Tools
+
+Use the OpenClaw plugin API to register the following tools:
+- `mail_access_get_mail`
+- `mail_access_read_mail`
+- `mail_access_reply`
+- `mail_access_forward`
+- `mail_access_send_mail`
+- `mail_access_archive`
+- `mail_access_move`
+
+## Tool Requirements
+
+### 1. `mail_access_get_mail`
+
+**Description:** List messages in Safe-Inbox folder with pagination and filtering.
+
+**Parameters (TypeScript with @sinclair/typebox):**
+```typescript
+{
+  count?: number;           // Number of messages to return (default: 10)
+  offset?: number;          // Offset for pagination (default: 0)
+  searchPhrase?: string;    // Search filter on subject/from/body
+  filter?: "unread" | "read" | "both";  // Message status filter (default: "unread")
+}
+```
+
+**Returns:**
+```typescript
+{
+  messages: Array<{
+    id: string;
+    from: string;
+    subject: string;
+    date: string;
+    preview: string;
+    isRead: boolean;
+  }>;
+  total: number;
+}
+```
+
+**Implementation Notes:**
+- Connect to IMAP using ImapClient
+- Select Safe-Inbox folder
+- Run IMAP SEARCH with filters
+- Return metadata only (no full content)
+- Never access INBOX (unverified messages)
+
+---
+
+### 2. `mail_access_read_mail`
+
+**Description:** Read a specific message from Safe-Inbox.
+
+**Parameters:**
+```typescript
+{
+  id: string;              // Message ID
+  folder?: string;         // Override folder (default: Safe-Inbox)
+}
+```
+
+**Returns:**
+```typescript
+{
+  from: string;
+  to: string[];
+  cc?: string[];
+  subject: string;
+  date: string;
+  body: string;
+  attachments?: Array<{
+    filename: string;
+    contentType: string;
+    size: number;
+  }>;
+}
+```
+
+**Implementation Notes:**
+- Fetch full message via IMAP
+- Extract headers and body
+- Return text body only (no HTML processing)
+- Do NOT download attachments (just metadata)
+- Use `decode_header_value` from imap-client
+
+---
+
+### 3. `mail_access_reply`
+
+**Description:** Reply to a message.
+
+**Parameters:**
+```typescript
+{
+  id: string;              // Message ID being replied to
+  content: string;        // Reply body
+  quoteOriginal?: boolean;  // Include quoted original (default: false)
+  folder?: string;         // Message location (default: Safe-Inbox)
+}
+```
+
+**Returns:**
+```typescript
+{
+  success: boolean;
+  sent: boolean;
+  messageId?: string;
+}
+```
+
+**Implementation Notes:**
+- Use SMTP client to send reply
+- Set In-Reply-To and References headers
+- From: always `config.smtp.from` (dexter@harms.haus)
+- To: extracted from original message
+- Extract original subject/body for quoting
+
+---
+
+### 4. `mail_access_forward`
+
+**Description:** Forward a message.
+
+**Parameters:**
+```typescript
+{
+  id: string;                    // Message ID to forward
+  toRecipients: string[];       // Required: primary recipients
+  ccRecipients?: string[];       // Optional: CC recipients
+  bccRecipients?: string[];      // Optional: BCC recipients
+  content?: string;             // Optional note to add
+  folder?: string;               // Message location (default: Safe-Inbox)
+}
+```
+
+**Returns:**
+```typescript
+{
+  success: boolean;
+  sent: boolean;
+  messageId?: string;
+}
+```
+
+**Implementation Notes:**
+- Forward via SMTP
+- Attach original message as forwarded content
+- From: always `config.smtp.from`
+- Use proper SMTP headers
+
+---
+
+### 5. `mail_access_send_mail`
+
+**Description:** Compose and send a new email.
+
+**Parameters:**
+```typescript
+{
+  toRecipients: string[];       // Required: primary recipients
+  ccRecipients?: string[];       // Optional: CC
+  bccRecipients?: string[];      // Optional: BCC
+  subject: string;               // Required: subject
+  content: string;               // Required: body
+  replyToMessageId?: string; // Optional: reply-to message ID
+}
+```
+
+**Returns:**
+```typescript
+{
+  success: boolean;
+  sent: boolean;
+  messageId?: string;
+}
+```
+
+**Implementation Notes:**
+- From: always `config.smtp.from` (dexter@harms.haus)
+- Plain text only for now
+- Use SMTP client's sendMail method
+- Proper headers (Subject, To, CC, BCC, Message-ID)
+
+---
+
+### 6. `mail_access_archive`
+
+**Description:** Archive a message (mark as read or move to Archive folder).
+
+**Parameters:**
+```typescript
+{
+  id: string;          // Message ID
+  folder?: string;     // Current location (default: Safe-Inbox)
+}
+```
+
+**Returns:**
+```typescript
+{
+  success: boolean;
+  moved: boolean;
+  destination?: string;
+}
+```
+
+**Implementation Notes:**
+- Option 1: Mark as read (add \\Seen flag)
+- Option 2: Move to Archive folder (create if needed)
+- Use IMAP STORE command
+- Return destination folder used
+
+---
+
+### 7. `mail_access_move`
+
+**Description:** Move a message to a different folder.
+
+**Parameters:**
+```typescript
+{
+  id: string;              // Message ID
+  folderPath: string;      // Destination folder (e.g., "Folders/Projects/Work")
+  currentFolder?: string; // Current location (default: Safe-Inbox)
+}
+```
+
+**Returns:**
+```typescript
+{
+  success: boolean;
+  moved: boolean;
+  destination: string;
+}
+```
+
+**Implementation Notes:**
+- Move message via IMAP COPY + DELETE
+- Validate destination folder exists first
+- Use IMAP client's copyMessage and moveMessage methods
+- Return actual destination folder name
+
+---
+
+## Implementation Steps
+
+1. **Import IMAP and SMTP clients** from `src/imap-client.ts` and `src/smtp-client.ts`
+2. **Import types** from `src/types.ts`
+3. **Import config types** from `@sinclair/typebox`
+4. **Define tool schemas** using Type.Object(), Type.String(), Type.Union(), etc.
+5. **Register each tool** with `api.registerTool()`
+6. **Each tool should:**
+   - Return `{ content: [{ type: "text", text: JSON.stringify(result) }] }`
+   - Handle errors with try/catch
+   - Log errors with api.logger
+
+7. **Update index.ts** to call tool registration
+8. **Build TypeScript** to verify compilation
+9. **Test each tool manually** (or write tests for later)
+
+## Plugin Integration
+
+The tools should be available to the main agent via:
+- Tool names: `mail_access_get_mail`, `mail_access_read_mail`, `mail_access_reply`, `mail_access_forward`, `mail_access_send_mail`, `mail_access_archive`, `mail_access_move`
+- Plugin ID: `mail-access`
+- Config: Will load from plugin config
+
+## When Complete
+
+After implementing all 7 tools:
+- Update `openclaw.plugin.json` if needed
+- Update README.md with tool usage examples
+- Update `package.json` if adding new dependencies
+- Build and verify: `npm run build`
+- Commit to git with: "Phase 2 complete: Safe mail tools registered"
