@@ -57,7 +57,7 @@ This plugin provides secure email access to ProtonMail Bridge using modern TypeS
 
 1. Clone or navigate to the plugin directory:
 ```bash
-cd extensions/mail-access
+cd ~/.haus/extensions/mail-access
 ```
 
 2. Install dependencies:
