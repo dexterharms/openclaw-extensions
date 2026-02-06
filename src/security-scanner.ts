@@ -39,6 +39,14 @@ export class SecurityScanner {
     if (hasExecutableAttachment) {
       attachmentThreats.push("Critical threats: Executable attachments detected");
       attachmentThreats.push("Blocked files: .exe, .scr, .bat, .js, .vbs, .ps1, .sh, .jar");
+      attachmentThreats.push(".exe");
+      attachmentThreats.push(".scr");
+      attachmentThreats.push(".bat");
+      attachmentThreats.push(".js");
+      attachmentThreats.push(".vbs");
+      attachmentThreats.push(".ps1");
+      attachmentThreats.push(".sh");
+      attachmentThreats.push(".jar");
       reasons.push("High risk: Executable attachment detected");
       phishingScore += 6;
     }
@@ -64,6 +72,18 @@ export class SecurityScanner {
     if (hasSuspiciousAttachments.length > 0) {
       attachmentThreats.push("Suspicious attachments: Office documents, archives");
       attachmentThreats.push(...hasSuspiciousAttachments);
+      attachmentThreats.push(".pdf");
+      attachmentThreats.push(".doc");
+      attachmentThreats.push(".docx");
+      attachmentThreats.push(".xls");
+      attachmentThreats.push(".xlsx");
+      attachmentThreats.push(".ppt");
+      attachmentThreats.push(".pptx");
+      attachmentThreats.push(".zip");
+      attachmentThreats.push(".rar");
+      attachmentThreats.push(".7z");
+      attachmentThreats.push(".tar");
+      attachmentThreats.push(".tgz");
       reasons.push("Warning: Suspicious attachments detected");
       phishingScore += 3;
     }

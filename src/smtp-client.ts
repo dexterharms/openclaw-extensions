@@ -1,27 +1,51 @@
 import nodemailer from "nodemailer";
 
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  useStarttls: boolean;
+  from: string;
+}
+
+export interface ISmtpConnection {
+  verify(): Promise<boolean>;
+  close(): Promise<void> | void;
+  sendMail(options: any): Promise<any>;
+}
+
 export class SmtpClient {
-  private transporter: nodemailer.Transporter | null = null;
+  private transporter: ISmtpConnection | null = null;
   private connected: boolean = false;
 
-  constructor(private config: any) {
-    this.transporter = nodemailer.createTransport({
-      host: this.config.host,
-      port: this.config.port,
-      secure: this.config.useStarttls,
-      auth: {
-        user: this.config.user,
-        pass: this.config.password,
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
-    });
+  constructor(
+    private config: SmtpConfig,
+    smtpConnection?: ISmtpConnection
+  ) {
+    if (smtpConnection) {
+      this.transporter = smtpConnection;
+    } else {
+      this.transporter = nodemailer.createTransport({
+        host: this.config.host,
+        port: this.config.port,
+        secure: this.config.useStarttls,
+        auth: {
+          user: this.config.user,
+          pass: this.config.password,
+        },
+        tls: {
+          rejectUnauthorized: false,
+        },
+      });
+    }
   }
 
   async connect(): Promise<void> {
     try {
-      await this.transporter!.verify();
+      if (this.transporter) {
+        await this.transporter.verify();
+      }
       this.connected = true;
       console.log("SMTP client connected");
     } catch (error) {
@@ -32,7 +56,9 @@ export class SmtpClient {
 
   async disconnect(): Promise<void> {
     try {
-      await this.transporter!.close();
+      if (this.transporter) {
+        await this.transporter.close();
+      }
       this.connected = false;
       console.log("SMTP client disconnected");
     } catch (error) {
@@ -58,7 +84,10 @@ export class SmtpClient {
       references: mail.references,
     };
 
-    return await this.transporter!.sendMail(options);
+    if (this.transporter) {
+      return await this.transporter.sendMail(options);
+    }
+    return {};
   }
 
   async replyTo(messageId: string, content: any): Promise<any> {
@@ -76,7 +105,10 @@ export class SmtpClient {
       references: messageId,
     };
 
-    return await this.transporter!.sendMail(options);
+    if (this.transporter) {
+      return await this.transporter.sendMail(options);
+    }
+    return {};
   }
 
   async forwardMessage(messageId: string, toRecipients: string | string[], content: any): Promise<any> {
@@ -92,7 +124,10 @@ export class SmtpClient {
       references: messageId,
     };
 
-    return await this.transporter!.sendMail(options);
+    if (this.transporter) {
+      return await this.transporter.sendMail(options);
+    }
+    return {};
   }
 
   async getConnectionStatus(): Promise<boolean> {

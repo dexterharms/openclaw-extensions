@@ -1,0 +1,748 @@
+# Phase 5: Testing (Unit Tests)
+
+## Context
+
+You are implementing unit tests for the mail-access plugin. Phases 1-4 are complete:
+- Phase 1: Skeleton, IMAP/SMTP clients, security scanner
+- Phase 2: Safe mail tools (7 tools, main agent)
+- Phase 3: Security tools (5 tools, security agent only, optional)
+- Phase 4: Background service (IMAP polling, security agent trigger)
+
+**Goal:** Achieve 90%+ test coverage for all components.
+
+## Requirements
+
+1. **Use vitest** as the test framework (TypeScript-friendly, fast)
+2. **Refactor to make testable:**
+   - Add dependency injection for mockable IMAP/SMTP clients
+   - Extract logic into pure functions where possible
+   - Create interfaces for external dependencies
+3. **Write tests for:**
+   - IMAP client (connection, folder operations, message fetching)
+   - SMTP client (connection, message sending)
+   - Security scanner (threat detection for various scenarios)
+   - Background service (polling, agent triggering)
+4. **Do NOT do integration testing** — only unit tests for now
+
+## Task 1: Set Up Testing Infrastructure
+
+### 1.1 Install vitest and dependencies
+
+```bash
+npm install -D vitest @vitest/coverage v8 @types/node
+```
+
+### 1.2 Create vitest.config.ts
+
+```typescript
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'node',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      include: ['src/**/*.ts'],
+      exclude: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
+    },
+  },
+});
+```
+
+### 1.3 Update package.json scripts
+
+```json
+{
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest --coverage",
+    "test:watch": "vitest --watch"
+  }
+}
+```
+
+## Task 2: Refactor for Testability
+
+### 2.1 IMAP Client Refactoring
+
+**Issues:**
+- ImapClient has hardcoded IMAP connection
+- Hard to mock for testing
+
+**Refactoring:**
+- Create `ImapConfig` interface for configuration
+- Accept config in constructor (don't instantiate internally)
+- Create `IImapConnection` interface for mocking IMAP library
+
+```typescript
+// src/imap-client.ts
+export interface ImapConfig {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  useStarttls: boolean;
+}
+
+export interface IImapConnection {
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  selectFolder(folder: string): Promise<void>;
+  getMessages(options: any): Promise<any[]>;
+  getMessage(id: string): Promise<any>;
+  moveMessage(id: string, folder: string): Promise<void>;
+  copyMessage(id: string, folder: string): Promise<void>;
+  searchMessages(criteria: any): Promise<any[]>;
+}
+```
+
+### 2.2 SMTP Client Refactoring
+
+**Issues:**
+- SmtpClient has hardcoded SMTP connection
+- Hard to mock for testing
+
+**Refactoring:**
+- Create `SmtpConfig` interface for configuration
+- Accept config in constructor
+- Create `ISmtpConnection` interface for mocking SMTP library
+
+```typescript
+// src/smtp-client.ts
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  useStarttls: boolean;
+  from: string;
+}
+
+export interface ISmtpConnection {
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  sendMail(message: MailMessage): Promise<any>;
+  replyTo(messageId: string, message: MailMessage): Promise<any>;
+  forwardMessage(messageId: string, recipients: string[], message: MailMessage): Promise<any>;
+}
+```
+
+### 2.3 Security Scanner Refactoring
+
+**Issues:**
+- Most methods already pure logic (good for testing!)
+- Only issue: dependencies on config
+
+**Refactoring:**
+- Extract threat detection logic into pure functions
+- Make scanner accept config via constructor
+
+```typescript
+// src/security-scanner.ts
+// Already mostly pure, just ensure config is injected
+export interface SecurityConfig {
+  knownSafeSenders: string[];
+  criticalThreats: string[];
+  phishingKeywords: string[];
+  credentialRequestPhrases: string[];
+  attachmentBlacklist: string[];
+  linkThreatPatterns: string[];
+}
+```
+
+## Task 3: Write Tests
+
+### 3.1 IMAP Client Tests
+
+Create `src/imap-client.test.ts`:
+
+```typescript
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { ImapClient } from './imap-client';
+import type { ImapConfig } from './imap-client';
+
+describe('ImapClient', () => {
+  let imapClient: ImapClient;
+  let mockConnection: any;
+
+  const mockConfig: ImapConfig = {
+    host: '127.0.0.1',
+    port: 1143,
+    user: 'test@example.com',
+    password: 'test-password',
+    useStarttls: true,
+  };
+
+  beforeEach(() => {
+    mockConnection = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      selectFolder: vi.fn().mockResolvedValue(undefined),
+      getMessages: vi.fn().mockResolvedValue([]),
+      getMessage: vi.fn().mockResolvedValue({}),
+      moveMessage: vi.fn().mockResolvedValue(undefined),
+      copyMessage: vi.fn().mockResolvedValue(undefined),
+      searchMessages: vi.fn().mockResolvedValue([]),
+    };
+  });
+
+  describe('connect', () => {
+    it('should connect to IMAP server', async () => {
+      await imapClient.connect();
+      expect(mockConnection.connect).toHaveBeenCalled();
+    });
+
+    it('should handle connection errors', async () => {
+      mockConnection.connect.mockRejectedValue(new Error('Connection failed'));
+      await expect(imapClient.connect()).rejects.toThrow('Connection failed');
+    });
+  });
+
+  describe('getMessages', () => {
+    it('should fetch messages with default options', async () => {
+      const messages = await imapClient.getMessages({});
+      expect(mockConnection.getMessages).toHaveBeenCalledWith({
+        count: 10,
+        offset: 0,
+      });
+    });
+
+    it('should apply filter parameter', async () => {
+      const messages = await imapClient.getMessages({ filter: 'unread' });
+      expect(mockConnection.getMessages).toHaveBeenCalledWith({
+        count: 10,
+        offset: 0,
+        filter: 'unread',
+      });
+    });
+
+    it('should handle IMAP errors', async () => {
+      mockConnection.getMessages.mockRejectedValue(new Error('IMAP error'));
+      await expect(imapClient.getMessages({})).rejects.toThrow('IMAP error');
+    });
+  });
+
+  describe('getMessage', () => {
+    it('should fetch a single message by ID', async () => {
+      const message = await imapClient.getMessage('msg123');
+      expect(mockConnection.getMessage).toHaveBeenCalledWith('msg123');
+    });
+  });
+
+  describe('moveMessage', () => {
+    it('should move message to folder', async () => {
+      await imapClient.moveMessage('msg123', 'Archive');
+      expect(mockConnection.copyMessage).toHaveBeenCalledWith('msg123', 'Archive');
+      expect(mockConnection.moveMessage).toHaveBeenCalled();
+    });
+  });
+});
+```
+
+### 3.2 SMTP Client Tests
+
+Create `src/smtp-client.test.ts`:
+
+```typescript
+import { describe, it, expect, vi } from 'vitest';
+import { SmtpClient } from './smtp-client';
+import type { SmtpConfig } from './smtp-client';
+
+describe('SmtpClient', () => {
+  let smtpClient: SmtpClient;
+  let mockConnection: any;
+
+  const mockConfig: SmtpConfig = {
+    host: '127.0.0.1',
+    port: 1025,
+    user: 'test@example.com',
+    password: 'test-password',
+    useStarttls: true,
+    from: 'test@example.com',
+  };
+
+  beforeEach(() => {
+    mockConnection = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      sendMail: vi.fn().mockResolvedValue({ messageId: 'msg-123' }),
+      replyTo: vi.fn().mockResolvedValue({ messageId: 'msg-124' }),
+      forwardMessage: vi.fn().mockResolvedValue({ messageId: 'msg-125' }),
+    };
+  });
+
+  describe('connect', () => {
+    it('should connect to SMTP server', async () => {
+      await smtpClient.connect();
+      expect(mockConnection.connect).toHaveBeenCalled();
+    });
+  });
+
+  describe('sendMail', () => {
+    it('should send email message', async () => {
+      const message = {
+        to: ['recipient@example.com'],
+        subject: 'Test Subject',
+        text: 'Test body',
+      };
+      const result = await smtpClient.sendMail(message);
+      expect(mockConnection.sendMail).toHaveBeenCalledWith(message);
+      expect(result.messageId).toBe('msg-123');
+    });
+
+    it('should handle sending errors', async () => {
+      mockConnection.sendMail.mockRejectedValue(new Error('SMTP error'));
+      await expect(smtpClient.sendMail({})).rejects.toThrow('SMTP error');
+    });
+  });
+});
+```
+
+### 3.3 Security Scanner Tests
+
+Create `src/security-scanner.test.ts`:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { SecurityScanner } from './security-scanner';
+import type { SecurityConfig } from './security-scanner';
+
+describe('SecurityScanner', () => {
+  let scanner: SecurityScanner;
+  let mockConfig: SecurityConfig;
+
+  beforeEach(() => {
+    mockConfig = {
+      knownSafeSenders: ['blake@harms.haus', 'erin@harms.haus'],
+      criticalThreats: ['.exe', '.scr', '.bat', '.js', '.vbs'],
+      phishingKeywords: ['urgent', 'immediate action', 'verify account'],
+      credentialRequestPhrases: ['password', 'verify your account'],
+      attachmentBlacklist: ['.pdf', '.doc', '.docx'],
+      linkThreatPatterns: ['bit.ly', 't.co'],
+    };
+    scanner = new SecurityScanner(mockConfig);
+  });
+
+  describe('analyzeMessage', () => {
+    it('should mark safe messages from known senders', () => {
+      const message = {
+        from: 'blake@harms.haus',
+        subject: 'Hello',
+        body: 'Test message',
+        attachments: [],
+      };
+      const result = scanner.analyzeMessage(message);
+      expect(result.level).toBe('safe');
+      expect(result.senderReputation).toBe('known');
+    });
+
+    it('should detect critical threats in attachments', () => {
+      const message = {
+        from: 'unknown@example.com',
+        subject: 'Update',
+        body: 'Please install this file',
+        attachments: [{ filename: 'update.exe', contentType: 'application/x-msdownload', size: 1024 }],
+      };
+      const result = scanner.analyzeMessage(message);
+      expect(result.level).toBe('dangerous');
+      expect(result.attachmentThreats).toContain('.exe');
+      expect(result.reasons).toContain('Critical attachment detected: .exe');
+    });
+
+    it('should detect phishing keywords', () => {
+      const message = {
+        from: 'phisher@example.com',
+        subject: 'URGENT: Verify your account',
+        body: 'Please verify your account immediately',
+        attachments: [],
+      };
+      const result = scanner.analyzeMessage(message);
+      expect(result.level).toBe('dangerous');
+      expect(result.reasons).toContain('Urgency keyword detected');
+      expect(result.reasons).toContain('Credential request detected');
+    });
+
+    it('should detect suspicious PDF attachments', () => {
+      const message = {
+        from: 'unknown@example.com',
+        subject: 'Invoice',
+        body: 'Please review',
+        attachments: [{ filename: 'invoice.pdf', contentType: 'application/pdf', size: 2048 }],
+      };
+      const result = scanner.analyzeMessage(message);
+      expect(result.level).toBe('suspicious');
+      expect(result.attachmentThreats).toContain('.pdf');
+    });
+
+    it('should detect suspicious link patterns', () => {
+      const message = {
+        from: 'unknown@example.com',
+        subject: 'Click here',
+        body: 'Visit http://bit.ly/abc123 for more info',
+        attachments: [],
+      };
+      const result = scanner.analyzeMessage(message);
+      expect(result.level).toBe('suspicious');
+      expect(result.linkThreats).toContain('bit.ly');
+    });
+
+    it('should calculate phishing score correctly', () => {
+      const message = {
+        from: 'unknown@example.com',
+        subject: 'URGENT: Password required',
+        body: 'Password needed immediately',
+        attachments: [],
+      };
+      const result = scanner.analyzeMessage(message);
+      // Multiple threats should increase score
+      expect(result.phishingScore).toBeGreaterThan(5);
+    });
+
+    it('should mark safe messages with no threats', () => {
+      const message = {
+        from: 'blake@harms.haus',
+        subject: 'Meeting tomorrow',
+        body: 'See you at 10am',
+        attachments: [],
+      };
+      const result = scanner.analyzeMessage(message);
+      expect(result.level).toBe('safe');
+      expect(result.phishingScore).toBe(0);
+      expect(result.reasons).toHaveLength(0);
+    });
+  });
+});
+```
+
+### 3.4 Background Service Tests
+
+Create `src/background-service.test.ts`:
+
+```typescript
+import { describe, it, expect, vi, beforeEach, afterEach, vi } from 'vitest';
+import { BackgroundService } from './background-service';
+import type { PluginConfig } from './types';
+
+describe('BackgroundService', () => {
+  let service: BackgroundService;
+  let mockImapClient: any;
+  let mockApi: any;
+
+  const mockConfig: PluginConfig = {
+    imap: {
+      host: '127.0.0.1',
+      port: 1143,
+      user: 'test@example.com',
+      password: 'test-password',
+      useStarttls: true,
+    },
+    folders: {
+      inbox: 'INBOX',
+      safeInbox: 'Safe-Inbox',
+      quarantine: 'Quarantine',
+      spam: 'Spam',
+      trash: 'Trash',
+    },
+    listener: {
+      enabled: true,
+      pollInterval: 60000,
+    },
+    security: {},
+    smtp: {},
+  };
+
+  beforeEach(() => {
+    mockImapClient = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      selectFolder: vi.fn().mockResolvedValue(undefined),
+      getMessages: vi.fn().mockResolvedValue([]),
+    };
+
+    mockApi = {
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      },
+      sessions_send: vi.fn().mockResolvedValue(undefined),
+    };
+
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe('start', () => {
+    it('should start polling interval', async () => {
+      await service.start();
+      expect(mockImapClient.connect).toHaveBeenCalled();
+      expect(mockApi.logger.info).toHaveBeenCalledWith('Starting mail-access background service');
+    });
+
+    it('should not start if already running', async () => {
+      // @ts-ignore - private property access for testing
+      service['isRunning'] = true;
+      await service.start();
+      expect(mockApi.logger.warn).toHaveBeenCalledWith('Background service already running');
+    });
+
+    it('should handle connection errors', async () => {
+      mockImapClient.connect.mockRejectedValue(new Error('Connection failed'));
+      await expect(service.start()).rejects.toThrow('Connection failed');
+    });
+  });
+
+  describe('scanNewMessages', () => {
+    it('should trigger security agent when new messages found', async () => {
+      mockImapClient.getMessages.mockResolvedValue([
+        { id: 'msg1', from: 'test@example.com', subject: 'Test' },
+        { id: 'msg2', from: 'test2@example.com', subject: 'Test2' },
+      ]);
+
+      // @ts-ignore - private method access for testing
+      await service['scanNewMessages'].call(service);
+
+      expect(mockApi.sessions_send).toHaveBeenCalledWith({
+        agent: 'security-agent',
+        message: 'New email detected: 2 message(s). Scan INBOX for threats using mail_security_scan_mail.',
+      });
+    });
+
+    it('should not trigger security agent when no new messages', async () => {
+      mockImapClient.getMessages.mockResolvedValue([]);
+
+      // @ts-ignore - private method access for testing
+      await service['scanNewMessages'].call(service);
+
+      expect(mockApi.sessions_send).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('stop', () => {
+    it('should stop polling interval', async () => {
+      await service.stop();
+      expect(mockApi.logger.info).toHaveBeenCalledWith('Stopping mail-access background service');
+      expect(mockImapClient.disconnect).toHaveBeenCalled();
+    });
+  });
+});
+```
+
+### 3.5 Tool Handler Tests
+
+Create `src/tools.test.ts` for testing tool handlers:
+
+```typescript
+import { describe, it, expect, vi } from 'vitest';
+import { registerSafeMailTools, registerSecurityTools } from './tools';
+
+describe('Tool Handlers', () => {
+  let mockApi: any;
+  let mockConfig: any;
+  let mockImapClient: any;
+  let mockSmtpClient: any;
+  let mockSecurityScanner: any;
+
+  beforeEach(() => {
+    mockApi = {
+      logger: {
+        info: vi.fn(),
+        error: vi.fn(),
+      },
+      registerTool: vi.fn(),
+    };
+
+    mockConfig = {
+      folders: {
+        inbox: 'INBOX',
+        safeInbox: 'Safe-Inbox',
+        quarantine: 'Quarantine',
+      },
+    };
+
+    mockImapClient = {
+      selectFolder: vi.fn().mockResolvedValue(undefined),
+      getMessages: vi.fn().mockResolvedValue([
+        { id: 'msg1', from: 'test@example.com', subject: 'Test', date: new Date(), flags: [], preview: 'Preview' },
+      ]),
+      getMessage: vi.fn().mockResolvedValue({
+        from: 'test@example.com',
+        to: 'recipient@example.com',
+        subject: 'Test',
+        body: 'Body',
+        date: new Date(),
+        attachments: [],
+      }),
+    };
+
+    mockSmtpClient = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      sendMail: vi.fn().mockResolvedValue({ messageId: 'msg-sent-123' }),
+      replyTo: vi.fn().mockResolvedValue({ messageId: 'msg-reply-123' }),
+      forwardMessage: vi.fn().mockResolvedValue({ messageId: 'msg-forward-123' }),
+    };
+
+    mockSecurityScanner = {
+      analyzeMessage: vi.fn().mockReturnValue({
+        level: 'safe',
+        reasons: [],
+        phishingScore: 0,
+        attachmentThreats: [],
+        linkThreats: [],
+        senderReputation: 'unknown',
+      }),
+    };
+  });
+
+  describe('Safe Mail Tools', () => {
+    it('should register mail_access_get_mail tool', () => {
+      registerSafeMailTools(mockApi, mockConfig, mockImapClient, mockSmtpClient);
+      expect(mockApi.registerTool).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'mail_access_get_mail',
+          description: expect.any(String),
+          parameters: expect.any(Object),
+        })
+      );
+    });
+
+    it('should register mail_access_read_mail tool', () => {
+      registerSafeMailTools(mockApi, mockConfig, mockImapClient, mockSmtpClient);
+      expect(mockApi.registerTool).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'mail_access_read_mail' })
+      );
+    });
+
+    it('should register mail_access_reply tool', () => {
+      registerSafeMailTools(mockApi, mockConfig, mockImapClient, mockSmtpClient);
+      expect(mockApi.registerTool).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'mail_access_reply' })
+      );
+    });
+
+    it('should handle reply errors', async () => {
+      mockImapClient.getMessage.mockRejectedValue(new Error('Message not found'));
+      registerSafeMailTools(mockApi, mockConfig, mockImapClient, mockSmtpClient);
+
+      // @ts-ignore - tool access for testing
+      const replyHandler = mockApi.registerTool.mock.calls.find(
+        (call: any) => call[0].name === 'mail_access_reply'
+      )?.[0].handler;
+
+      const result = await replyHandler({ id: 'msg1', content: 'Reply' });
+      expect(result.content[0].text).toContain('"success":false');
+    });
+  });
+
+  describe('Security Tools', () => {
+    it('should register security tools with optional flag', () => {
+      registerSecurityTools(mockApi, mockConfig, mockImapClient, mockSecurityScanner);
+      const registerCalls = mockApi.registerTool.mock.calls;
+
+      expect(registerCalls.length).toBeGreaterThanOrEqual(5);
+
+      // Check that security tools have optional flag
+      const securityToolNames = [
+        'mail_security_scan_mail',
+        'mail_security_mark_safe',
+        'mail_security_quarantine',
+        'mail_security_trash',
+        'mail_security_finish_check',
+      ];
+
+      securityToolNames.forEach(name => {
+        const call = registerCalls.find((c: any) => c[0]?.name === name);
+        expect(call?.[1]).toEqual({ optional: true });
+      });
+    });
+
+    it('should not register security tools for main agent', () => {
+      // Security tools should only be available to security agent
+      // This is enforced by agent config, not plugin
+      expect(mockApi.registerTool).toHaveBeenCalled();
+    });
+  });
+});
+```
+
+## Implementation Steps
+
+1. **Install dependencies:**
+   ```bash
+   npm install -D vitest @vitest/coverage v8 @types/node
+   ```
+
+2. **Create vitest.config.ts** with coverage configuration
+
+3. **Update package.json** with test scripts
+
+4. **Refactor IMAP client:**
+   - Create `ImapConfig` and `IImapConnection` interfaces
+   - Accept config in constructor
+   - Make IMAP library injectable for mocking
+
+5. **Refactor SMTP client:**
+   - Create `SmtpConfig` and `ISmtpConnection` interfaces
+   - Accept config in constructor
+   - Make SMTP library injectable for mocking
+
+6. **Refactor security scanner:**
+   - Ensure config is injected via constructor
+   - Extract pure logic where possible
+
+7. **Write tests:**
+   - `src/imap-client.test.ts` (IMAP operations)
+   - `src/smtp-client.test.ts` (SMTP operations)
+   - `src/security-scanner.test.ts` (threat detection)
+   - `src/background-service.test.ts` (polling and triggering)
+   - `src/tools.test.ts` (tool handlers)
+
+8. **Run tests:**
+   ```bash
+   npm run test
+   ```
+
+9. **Check coverage:**
+   ```bash
+   npm run test:coverage
+   ```
+   Target: 90%+ coverage
+
+10. **Commit changes:**
+   ```bash
+   git add .
+   git commit -m "Phase 5 complete: Unit tests (90%+ coverage) with vitest"
+   ```
+
+## Notes
+
+- **Refactoring first:** Make code testable before writing tests
+- **Mock dependencies:** Use vitest's vi.fn() to mock IMAP/SMTP clients
+- **Coverage target:** 90%+ for production readiness
+- **No integration tests:** Focus on unit tests, integration tests come later
+- **Use context7/searxng:** If you need more info about testing patterns or library APIs, search with context7 or searxng skill
+- **Pure functions:** Extract logic into pure functions where possible for easier testing
+
+## Testing Strategy
+
+- **IMAP client:** Connection, folder selection, message fetching, moving, searching
+- **SMTP client:** Connection, sending, replying, forwarding
+- **Security scanner:** All threat detection scenarios (safe, suspicious, dangerous)
+- **Background service:** Polling interval, new message detection, agent triggering
+- **Tool handlers:** Tool registration, parameter validation, error handling
+
+## When Complete
+
+After implementation:
+- All tests should pass: `npm run test`
+- Coverage should be 90%+: `npm run test:coverage`
+- TypeScript should compile: `npm run build`
+- Commit and push to GitHub
+
+Test files should be in `src/*.test.ts` (not `src/tests/`)
