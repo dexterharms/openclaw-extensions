@@ -83,14 +83,14 @@ describe('BackgroundService', () => {
 
   describe('start', () => {
     it('should start polling interval', async () => {
-      service = new BackgroundService(mockApi, mockConfig);
+      service = new BackgroundService(mockApi, mockConfig, mockImapConnection);
       await service.start();
       expect(mockImapConnection.connect).toHaveBeenCalled();
       expect(mockApi.logger.info).toHaveBeenCalledWith('Starting mail-access background service');
     });
 
     it('should not start if already running', async () => {
-      service = new BackgroundService(mockApi, mockConfig);
+      service = new BackgroundService(mockApi, mockConfig, mockImapConnection);
       await service.start();
       await service.start();
       expect(mockApi.logger.warn).toHaveBeenCalledWith('Background service already running');
@@ -98,18 +98,43 @@ describe('BackgroundService', () => {
 
     it('should handle connection errors', async () => {
       mockImapConnection.connect.mockRejectedValue(new Error('Connection failed'));
-      service = new BackgroundService(mockApi, mockConfig);
+      service = new BackgroundService(mockApi, mockConfig, mockImapConnection);
       await expect(service.start()).rejects.toThrow('Connection failed');
     });
 
     it('should trigger security agent when new messages found', async () => {
-      const messages: any[] = [
-        { id: 'msg1', from: 'test@example.com', subject: 'Test', date: new Date(), flags: [], preview: 'Test' },
-        { id: 'msg2', from: 'test2@example.com', subject: 'Test2', date: new Date(), flags: [], preview: 'Test2' },
+      // Mock raw IMAP message structure
+      const rawMessages: any[] = [
+        {
+          seqNo: 1,
+          uid: 1,
+          size: 1000,
+          flags: [],
+          attributes: { date: new Date() },
+          headers: {
+            from: { value: [{ address: { address: 'test@example.com' } }] },
+            to: { value: [{ address: { address: 'recipient@example.com' } }] },
+            subject: { value: 'Test' },
+          },
+          body: { text: 'Test body' },
+        },
+        {
+          seqNo: 2,
+          uid: 2,
+          size: 1000,
+          flags: [],
+          attributes: { date: new Date() },
+          headers: {
+            from: { value: [{ address: { address: 'test2@example.com' } }] },
+            to: { value: [{ address: { address: 'recipient@example.com' } }] },
+            subject: { value: 'Test2' },
+          },
+          body: { text: 'Test2 body' },
+        },
       ];
-      mockImapConnection.listMessages.mockResolvedValue(messages);
+      mockImapConnection.listMessages.mockResolvedValue(rawMessages);
 
-      service = new BackgroundService(mockApi, mockConfig);
+      service = new BackgroundService(mockApi, mockConfig, mockImapConnection);
       await service.start();
 
       await vi.advanceTimersByTimeAsync(60000);
@@ -123,7 +148,7 @@ describe('BackgroundService', () => {
     it('should not trigger security agent when no new messages', async () => {
       mockImapConnection.listMessages.mockResolvedValue([]);
 
-      service = new BackgroundService(mockApi, mockConfig);
+      service = new BackgroundService(mockApi, mockConfig, mockImapConnection);
       await service.start();
 
       await vi.advanceTimersByTimeAsync(60000);
@@ -135,7 +160,7 @@ describe('BackgroundService', () => {
       const messages: any[] = [];
       mockImapConnection.listMessages.mockResolvedValue(messages);
 
-      service = new BackgroundService(mockApi, mockConfig);
+      service = new BackgroundService(mockApi, mockConfig, mockImapConnection);
       await service.start();
 
       await vi.advanceTimersByTimeAsync(60000);
@@ -146,7 +171,7 @@ describe('BackgroundService', () => {
 
   describe('stop', () => {
     it('should stop polling interval', async () => {
-      service = new BackgroundService(mockApi, mockConfig);
+      service = new BackgroundService(mockApi, mockConfig, mockImapConnection);
       await service.start();
       await service.stop();
 
@@ -156,7 +181,7 @@ describe('BackgroundService', () => {
 
     it('should handle disconnect errors gracefully', async () => {
       mockImapConnection.disconnect.mockRejectedValue(new Error('Disconnect failed'));
-      service = new BackgroundService(mockApi, mockConfig);
+      service = new BackgroundService(mockApi, mockConfig, mockImapConnection);
       await service.start();
       await service.stop();
 
@@ -166,12 +191,24 @@ describe('BackgroundService', () => {
 
   describe('getRecentMessages', () => {
     it('should get recent messages from last N hours', async () => {
-      const messages = [
-        { id: 'msg1', from: 'test@example.com', subject: 'Test', date: new Date(), flags: [], preview: 'Test' },
+      const rawMessages: any[] = [
+        {
+          seqNo: 1,
+          uid: 1,
+          size: 1000,
+          flags: [],
+          attributes: { date: new Date() },
+          headers: {
+            from: { value: [{ address: { address: 'test@example.com' } }] },
+            to: { value: [{ address: { address: 'recipient@example.com' } }] },
+            subject: { value: 'Test' },
+          },
+          body: { text: 'Test body' },
+        },
       ];
-      mockImapConnection.listMessages.mockResolvedValue(messages);
+      mockImapConnection.listMessages.mockResolvedValue(rawMessages);
 
-      service = new BackgroundService(mockApi, mockConfig);
+      service = new BackgroundService(mockApi, mockConfig, mockImapConnection);
       await service.start();
 
       const recent = await service.getRecentMessages(24);
@@ -180,10 +217,10 @@ describe('BackgroundService', () => {
     });
 
     it('should start service if not running', async () => {
-      const messages = [];
-      mockImapConnection.listMessages.mockResolvedValue(messages);
+      const rawMessages: any[] = [];
+      mockImapConnection.listMessages.mockResolvedValue(rawMessages);
 
-      service = new BackgroundService(mockApi, mockConfig);
+      service = new BackgroundService(mockApi, mockConfig, mockImapConnection);
       await service.getRecentMessages(24);
 
       expect(mockImapConnection.connect).toHaveBeenCalled();
@@ -199,9 +236,21 @@ describe('BackgroundService', () => {
           size: 1024,
         },
       };
-      mockImapConnection.status.mockResolvedValue(inboxStats);
+      const quarantineStats = {
+        attributes: {
+          unread: 0,
+          messages: 0,
+          size: 0,
+        },
+      };
+      // Mock to return different values based on folder name
+      mockImapConnection.status.mockImplementation((folder: string) => {
+        if (folder === 'INBOX') return Promise.resolve(inboxStats);
+        if (folder === 'Quarantine') return Promise.resolve(quarantineStats);
+        return Promise.resolve({ attributes: { unread: 0, messages: 0, size: 0 } });
+      });
 
-      service = new BackgroundService(mockApi, mockConfig);
+      service = new BackgroundService(mockApi, mockConfig, mockImapConnection);
       await service.start();
 
       const status = await service.getStatus();
@@ -216,7 +265,7 @@ describe('BackgroundService', () => {
     });
 
     it('should handle status errors gracefully', async () => {
-      service = new BackgroundService(mockApi, mockConfig);
+      service = new BackgroundService(mockApi, mockConfig, mockImapConnection);
       await service.start();
 
       const status = await service.getStatus();
@@ -227,12 +276,24 @@ describe('BackgroundService', () => {
 
   describe('scanNewMessages', () => {
     it('should scan for new messages', async () => {
-      const messages: any[] = [
-        { id: 'msg1', from: 'test@example.com', subject: 'Test', date: new Date(), flags: [], preview: 'Test' },
+      const rawMessages: any[] = [
+        {
+          seqNo: 1,
+          uid: 1,
+          size: 1000,
+          flags: [],
+          attributes: { date: new Date() },
+          headers: {
+            from: { value: [{ address: { address: 'test@example.com' } }] },
+            to: { value: [{ address: { address: 'recipient@example.com' } }] },
+            subject: { value: 'Test' },
+          },
+          body: { text: 'Test body' },
+        },
       ];
-      mockImapConnection.listMessages.mockResolvedValue(messages);
+      mockImapConnection.listMessages.mockResolvedValue(rawMessages);
 
-      service = new BackgroundService(mockApi, mockConfig);
+      service = new BackgroundService(mockApi, mockConfig, mockImapConnection);
       await service.start();
 
       await vi.advanceTimersByTimeAsync(60000);

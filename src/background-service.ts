@@ -9,9 +9,10 @@ export class BackgroundService {
 
   constructor(
     private api: any,
-    private config: PluginConfig
+    private config: PluginConfig,
+    imapConnection?: any
   ) {
-    this.imapClient = new ImapClient(this.config.imap);
+    this.imapClient = new ImapClient(this.config.imap, imapConnection);
   }
 
   async start(): Promise<void> {

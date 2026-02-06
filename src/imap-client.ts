@@ -28,7 +28,9 @@ export class ImapClient {
     private config: ImapConfig,
     private imapConnection?: IImapConnection
   ) {
-    if (!imapConnection) {
+    if (imapConnection) {
+      this.client = imapConnection;
+    } else {
       this.client = new (ImapFlow as any).ImapFlow({
         host: this.config.host,
         port: this.config.port,

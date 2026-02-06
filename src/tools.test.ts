@@ -182,7 +182,12 @@ describe('Tool Handlers', () => {
       }
     });
 
-    it('should call securityScanner for scan mail tool', () => {
+    it('should call securityScanner for scan mail tool', async () => {
+      // Need to mock getMessages to return a test message
+      mockImapClient.getMessages.mockResolvedValue([
+        { id: 'msg1', from: 'test@example.com', subject: 'Test', date: new Date(), flags: [], preview: 'Test' },
+      ]);
+
       registerSecurityTools(mockApi, mockConfig, mockImapClient, mockSecurityScanner);
       const registerCalls = mockApi.registerTool.mock.calls;
       const scanCall = registerCalls.find((c: any) => c[0]?.name === 'mail_security_scan_mail');
@@ -191,7 +196,7 @@ describe('Tool Handlers', () => {
         const handler = scanCall[0]?.handler;
         if (handler) {
           const params = { scanAll: false };
-          handler(params);
+          await handler(params);
           expect(mockSecurityScanner.analyzeMessage).toHaveBeenCalled();
         }
       }
