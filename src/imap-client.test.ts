@@ -17,13 +17,24 @@ describe('ImapClient', () => {
   beforeEach(() => {
     mockConnection = {
       connect: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
+      logout: vi.fn().mockResolvedValue(undefined),
       select: vi.fn().mockResolvedValue(undefined),
       list: vi.fn().mockResolvedValue([]),
-      listMessages: vi.fn().mockResolvedValue([]),
-      fetchMessage: vi.fn().mockResolvedValue({}),
-      move: vi.fn().mockResolvedValue(undefined),
-      copy: vi.fn().mockResolvedValue(undefined),
+      fetchAll: vi.fn().mockResolvedValue([]),
+      fetchOne: vi.fn().mockResolvedValue({
+        seq: 1,
+        uid: 123,
+        subject: 'Test Subject',
+        from: { address: 'test@example.com' },
+        to: [{ address: 'recipient@example.com' }],
+        date: new Date(),
+        size: 1024,
+        flags: [],
+        text: 'Test body',
+        attachments: [],
+      }),
+      messageMove: vi.fn().mockResolvedValue(undefined),
+      messageCopy: vi.fn().mockResolvedValue(undefined),
       status: vi.fn().mockResolvedValue({
         attributes: {
           unread: 0,
@@ -31,6 +42,7 @@ describe('ImapClient', () => {
           size: 0,
         },
       }),
+      listMessages: vi.fn().mockResolvedValue([]),
     };
 
     imapClient = new ImapClient(mockConfig, mockConnection);
@@ -56,11 +68,11 @@ describe('ImapClient', () => {
   describe('disconnect', () => {
     it('should disconnect from IMAP server', async () => {
       await imapClient.disconnect();
-      expect(mockConnection.disconnect).toHaveBeenCalled();
+      expect(mockConnection.logout).toHaveBeenCalled();
     });
 
     it('should handle disconnection errors', async () => {
-      mockConnection.disconnect.mockRejectedValue(new Error('Disconnect failed'));
+      mockConnection.logout.mockRejectedValue(new Error('Disconnect failed'));
       await expect(imapClient.disconnect()).rejects.toThrow('Disconnect failed');
     });
 
@@ -115,29 +127,28 @@ describe('ImapClient', () => {
     it('should fetch messages with default options', async () => {
       const mockMessages = [
         {
-          seqNo: 1,
+          seq: 1,
           uid: 1,
-          headers: {
-            from: { value: [{ address: { address: 'test@example.com' } }] },
-            to: { value: [{ address: { address: 'recipient@example.com' } }] },
-            subject: { value: 'Test Subject' },
-          },
-          attributes: { date: Date.now() },
-          body: { text: 'Test body content' },
-          flags: [],
+          subject: 'Test Subject',
+          from: { address: 'test@example.com' },
+          to: [{ address: 'recipient@example.com' }],
+          date: new Date(),
           size: 100,
-          parts: [],
+          flags: [],
+          text: 'Test body content',
+          attachments: [],
         },
       ];
-      mockConnection.listMessages.mockResolvedValue(mockMessages);
+      mockConnection.fetchAll.mockResolvedValue(mockMessages);
 
       const messages = await imapClient.getMessages({});
-      expect(mockConnection.listMessages).toHaveBeenCalledWith(
-        [],
+      expect(mockConnection.fetchAll).toHaveBeenCalledWith(
+        {},
         {
-          markSeen: false,
-          uid: true,
-          bodyParts: ['HEADER.FIELDS (FROM TO SUBJECT DATE)', 'TEXT'],
+          source: {
+            headers: ['from', 'to', 'cc', 'bcc', 'subject', 'date'],
+            bodyParts: ['text'],
+          },
         }
       );
       expect(messages).toHaveLength(1);
@@ -145,63 +156,61 @@ describe('ImapClient', () => {
     });
 
     it('should apply filter parameter', async () => {
-      mockConnection.listMessages.mockResolvedValue([]);
+      mockConnection.fetchAll.mockResolvedValue([]);
 
       await imapClient.getMessages({ filter: 'unread' });
-      expect(mockConnection.listMessages).toHaveBeenCalledWith(
-        [{ seen: false }],
+      expect(mockConnection.fetchAll).toHaveBeenCalledWith(
+        { seen: false },
         expect.any(Object)
       );
     });
 
     it('should apply search phrase parameter', async () => {
-      mockConnection.listMessages.mockResolvedValue([]);
+      mockConnection.fetchAll.mockResolvedValue([]);
 
       await imapClient.getMessages({ searchPhrase: 'important' });
-      expect(mockConnection.listMessages).toHaveBeenCalledWith(
-        [{ subject: 'important' }],
+      expect(mockConnection.fetchAll).toHaveBeenCalledWith(
+        { subject: 'important' },
         expect.any(Object)
       );
     });
 
     it('should handle IMAP errors', async () => {
-      mockConnection.listMessages.mockRejectedValue(new Error('IMAP error'));
+      mockConnection.fetchAll.mockRejectedValue(new Error('IMAP error'));
       await expect(imapClient.getMessages({})).rejects.toThrow('IMAP error');
     });
 
     it('should apply count and offset parameters', async () => {
-      mockConnection.listMessages.mockResolvedValue([]);
+      mockConnection.fetchAll.mockResolvedValue([]);
 
       await imapClient.getMessages({ count: 20, offset: 5 });
-      expect(mockConnection.listMessages).toHaveBeenCalled();
+      expect(mockConnection.fetchAll).toHaveBeenCalled();
     });
   });
 
   describe('getMessage', () => {
     it('should fetch a single message by ID', async () => {
       const mockMessage = {
-        seqNo: 123,
+        seq: 123,
         uid: 123,
-        headers: {
-          from: { value: [{ address: { address: 'test@example.com' } }] },
-          to: { value: [{ address: { address: 'recipient@example.com' } }] },
-          subject: { value: 'Test Subject' },
-        },
-        attributes: { date: Date.now() },
-        body: { text: 'Test body content' },
-        flags: [],
+        from: { address: 'test@example.com' },
+        to: [{ address: 'recipient@example.com' }],
+        subject: 'Test Subject',
+        date: new Date(),
         size: 100,
-        parts: [],
+        flags: [],
+        text: 'Test body content',
+        attachments: [],
       };
-      mockConnection.fetchMessage.mockResolvedValue(mockMessage);
+      mockConnection.fetchOne.mockResolvedValue(mockMessage);
 
       const message = await imapClient.getMessage('123');
-      expect(mockConnection.fetchMessage).toHaveBeenCalledWith('123', expect.any(Object));
+      expect(mockConnection.fetchOne).toHaveBeenCalledWith('123', expect.any(Object));
       expect(message.subject).toBe('Test Subject');
     });
 
     it('should handle message fetch errors', async () => {
-      mockConnection.fetchMessage.mockRejectedValue(new Error('Message not found'));
+      mockConnection.fetchOne.mockRejectedValue(new Error('Message not found'));
       await expect(imapClient.getMessage('123')).rejects.toThrow('Message not found');
     });
   });
@@ -209,7 +218,7 @@ describe('ImapClient', () => {
   describe('moveMessage', () => {
     it('should move message to folder', async () => {
       await imapClient.moveMessage('123', 'Archive');
-      expect(mockConnection.move).toHaveBeenCalledWith({ seqNo: 123 }, 'Archive');
+      expect(mockConnection.messageMove).toHaveBeenCalledWith('123', 'Archive');
     });
 
     it('should connect if not connected', async () => {
@@ -218,7 +227,7 @@ describe('ImapClient', () => {
     });
 
     it('should handle move errors', async () => {
-      mockConnection.move.mockRejectedValue(new Error('Move failed'));
+      mockConnection.messageMove.mockRejectedValue(new Error('Move failed'));
       await expect(imapClient.moveMessage('123', 'Archive')).rejects.toThrow('Move failed');
     });
   });
@@ -226,7 +235,7 @@ describe('ImapClient', () => {
   describe('copyMessage', () => {
     it('should copy message to folder', async () => {
       await imapClient.copyMessage('123', 'Archive');
-      expect(mockConnection.copy).toHaveBeenCalledWith({ seqNo: 123 }, 'Archive');
+      expect(mockConnection.messageCopy).toHaveBeenCalledWith('123', 'Archive');
     });
 
     it('should connect if not connected', async () => {
@@ -235,7 +244,7 @@ describe('ImapClient', () => {
     });
 
     it('should handle copy errors', async () => {
-      mockConnection.copy.mockRejectedValue(new Error('Copy failed'));
+      mockConnection.messageCopy.mockRejectedValue(new Error('Copy failed'));
       await expect(imapClient.copyMessage('123', 'Archive')).rejects.toThrow('Copy failed');
     });
   });

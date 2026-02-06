@@ -12,8 +12,8 @@
  * 3. Ports accessible: 127.0.0.1:1143 (IMAP), 127.0.0.1:1025 (SMTP)
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-const imap_client_1 = require("../src/imap-client");
-const smtp_client_1 = require("../src/smtp-client");
+const imap_client_js_1 = require("../dist/src/imap-client.js");
+const smtp_client_js_1 = require("../dist/src/smtp-client.js");
 const IMAP_CONFIG = {
     host: '127.0.0.1',
     port: 1143,
@@ -33,8 +33,8 @@ class IntegrationTester {
     imapClient;
     smtpClient;
     constructor() {
-        this.imapClient = new imap_client_1.ImapClient(IMAP_CONFIG);
-        this.smtpClient = new smtp_client_1.SmtpClient(SMTP_CONFIG);
+        this.imapClient = new imap_client_js_1.ImapClient(IMAP_CONFIG);
+        this.smtpClient = new smtp_client_js_1.SmtpClient(SMTP_CONFIG);
     }
     async testConnection() {
         console.log('\n=== Testing IMAP Connection ===');

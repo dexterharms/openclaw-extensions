@@ -54,6 +54,9 @@ class ImapClient {
                     pass: this.config.password,
                 },
                 logger: false,
+                tls: {
+                    rejectUnauthorized: false, // Accept self-signed certs for localhost
+                },
             });
         }
     }

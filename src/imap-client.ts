@@ -10,14 +10,15 @@ export interface ImapConfig {
 
 export interface IImapConnection {
   connect(): Promise<void>;
-  disconnect(): Promise<void>;
+  logout(): Promise<void>;
   select(folder: string): Promise<void>;
   list(): Promise<any[]>;
-  listMessages(criteria: any[], options: any): Promise<any[]>;
-  fetchMessage(id: string, options: any): Promise<any>;
-  move(selector: any, destination: string): Promise<void>;
-  copy(selector: any, destination: string): Promise<void>;
+  fetchAll(criteria: any, options: any): Promise<any[]>;
+  fetchOne(id: string, options: any): Promise<any>;
+  messageMove(selector: any, destination: string): Promise<void>;
+  messageCopy(selector: any, destination: string): Promise<void>;
   status(folder: string, options: any): Promise<any>;
+  listMessages(criteria: any[], options: any): Promise<any[]>;
 }
 
 export class ImapClient {
@@ -40,6 +41,10 @@ export class ImapClient {
           pass: this.config.password,
         },
         logger: false,
+        tls: {
+          rejectUnauthorized: false, // Accept self-signed certs for localhost
+          minVersion: 'TLSv1.2', // Fix SSL version issues
+        },
       });
     }
   }
@@ -60,7 +65,7 @@ export class ImapClient {
   async disconnect(): Promise<void> {
     try {
       if (this.client) {
-        await this.client.disconnect();
+        await this.client.logout();
       }
       this.connected = false;
       console.log("IMAP client disconnected");
@@ -102,58 +107,50 @@ export class ImapClient {
 
     const { count = 50, offset = 0, searchPhrase, filter = "both" } = opts;
 
-    let searchCriteria = [];
+    let searchCriteria: any = {};
 
     if (searchPhrase) {
-      searchCriteria.push({ subject: searchPhrase });
+      searchCriteria.subject = searchPhrase;
     }
 
     if (filter === "unread") {
-      searchCriteria.push({ seen: false });
+      searchCriteria.seen = false;
     } else if (filter === "read") {
-      searchCriteria.push({ seen: true });
+      searchCriteria.seen = true;
     }
 
     if (this.client) {
-      const messages = await this.client.listMessages(searchCriteria, {
-        markSeen: filter === "read",
-        uid: true,
-        bodyParts: ["HEADER.FIELDS (FROM TO SUBJECT DATE)", "TEXT"],
+      const messages: any[] = await this.client.fetchAll(searchCriteria, {
+        source: {
+          headers: ['from', 'to', 'cc', 'bcc', 'subject', 'date'],
+          bodyParts: ['text'],
+        },
       });
 
       const messagesToReturn: any[] = [];
 
       for (const message of messages) {
-        const body = message.body?.text || "";
+        const body = message.text || "";
         const preview = body.substring(0, 200);
 
         messagesToReturn.push({
-          id: String(message.seqNo),
+          id: String(message.seq || message['#']),
           uid: message.uid,
-          from: message.headers.from?.value?.[0]?.address?.address || "unknown",
-          to: message.headers.to?.value?.[0]?.address?.address || "unknown",
-          subject: message.headers.subject?.value || "No Subject",
-          date: new Date(message.attributes.date || Date.now()),
-          size: message.size,
+          from: message.from?.address || "unknown",
+          to: message.to?.map((t: any) => t.address).join(",") || "unknown",
+          subject: message.subject || "No Subject",
+          date: new Date(message.date || Date.now()),
+          size: message.size || 0,
           flags: message.flags || [],
           preview,
           body,
           headers: {
-            from: message.headers.from?.value?.map((f: any) => f.value?.address?.address).join(", "),
-            to: message.headers.to?.value?.map((t: any) => t.value?.address?.address).join(", "),
-            subject: message.headers.subject?.value,
-            date: message.attributes.date,
+            from: message.from?.address || "unknown",
+            to: message.to?.map((t: any) => t.address).join(",") || "unknown",
+            subject: message.subject || "No Subject",
+            date: message.date,
           },
-          attachments: message.parts?.filter((part: any) =>
-            part.disposition?.type === "attachment"
-          ).map((part: any) => ({
-            id: part.partId,
-            filename: part.disposition?.params?.filename || "unknown",
-            size: part.size,
-            contentType: part.contentType,
-            disposition: part.disposition?.type,
-            contentId: part.id,
-          })) || [],
+          attachments: message.attachments || [],
         });
       }
 
@@ -168,41 +165,34 @@ export class ImapClient {
     }
 
     if (this.client) {
-      const message = await this.client.fetchMessage(id, {
-        uid: true,
-        bodyParts: ["HEADER.FIELDS (FROM TO SUBJECT DATE)", "TEXT", "ENVELOPE"],
+      const message: any = await this.client.fetchOne(id, {
+        source: {
+          headers: ['from', 'to', 'cc', 'bcc', 'subject', 'date'],
+          bodyParts: ['text'],
+        },
       });
 
-      const body = message.body?.text || "";
+      const body = message.text || "";
       const preview = body.substring(0, 200);
 
       return {
-        id: String(message.seqNo),
+        id: String(message.seq || message['#']),
         uid: message.uid,
-        from: message.headers.from?.value?.[0]?.address?.address || "unknown",
-        to: message.headers.to?.value?.[0]?.address?.address || "unknown",
-        subject: message.headers.subject?.value || "No Subject",
-        date: new Date(message.attributes.date || Date.now()),
-        size: message.size,
+        from: message.from?.address || "unknown",
+        to: message.to?.map((t: any) => t.address).join(",") || "unknown",
+        subject: message.subject || "No Subject",
+        date: new Date(message.date || Date.now()),
+        size: message.size || 0,
         flags: message.flags || [],
         preview,
         body,
         headers: {
-          from: message.headers.from?.value?.map((f: any) => f.value?.address?.address).join(", "),
-          to: message.headers.to?.value?.map((t: any) => t.value?.address?.address).join(", "),
-          subject: message.headers.subject?.value,
-          date: message.attributes.date,
+          from: message.from?.address || "unknown",
+          to: message.to?.map((t: any) => t.address).join(",") || "unknown",
+          subject: message.subject || "No Subject",
+          date: message.date,
         },
-        attachments: message.parts?.filter((part: any) =>
-          part.disposition?.type === "attachment"
-        ).map((part: any) => ({
-          id: part.partId,
-          filename: part.disposition?.params?.filename || "unknown",
-          size: part.size,
-          contentType: part.contentType,
-          disposition: part.disposition?.type,
-          contentId: part.id,
-        })) || [],
+        attachments: message.attachments || [],
       };
     }
     return {};
@@ -214,7 +204,7 @@ export class ImapClient {
     }
 
     if (this.client) {
-      await this.client.move({ seqNo: Number(id) }, destination);
+      await this.client.messageMove(String(id), destination);
       console.log(`Message ${id} moved to ${destination}`);
     }
   }
@@ -225,7 +215,7 @@ export class ImapClient {
     }
 
     if (this.client) {
-      await this.client.copy({ seqNo: Number(id) }, destination);
+      await this.client.messageCopy(String(id), destination);
       console.log(`Message ${id} copied to ${destination}`);
     }
   }
