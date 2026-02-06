@@ -16,9 +16,9 @@ export default function register(api: any, config: PluginConfig): {
             host: string;
             port: number;
             user: string;
+            from: string;
             password: string;
             useStarttls: boolean;
-            from: string;
         };
         folders: {
             inbox: string;

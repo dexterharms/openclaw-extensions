@@ -1,8 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { registerSafeMailTools, registerSecurityTools } from './tools';
-import type { ImapClient } from './imap-client';
-import type { SmtpClient } from './smtp-client';
-import type { SecurityScanner } from './security-scanner';
 
 describe('Tool Handlers', () => {
   let mockApi: any;

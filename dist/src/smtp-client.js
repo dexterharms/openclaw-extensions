@@ -9,24 +9,31 @@ class SmtpClient {
     config;
     transporter = null;
     connected = false;
-    constructor(config) {
+    constructor(config, smtpConnection) {
         this.config = config;
-        this.transporter = nodemailer_1.default.createTransport({
-            host: this.config.host,
-            port: this.config.port,
-            secure: this.config.useStarttls,
-            auth: {
-                user: this.config.user,
-                pass: this.config.password,
-            },
-            tls: {
-                rejectUnauthorized: false,
-            },
-        });
+        if (smtpConnection) {
+            this.transporter = smtpConnection;
+        }
+        else {
+            this.transporter = nodemailer_1.default.createTransport({
+                host: this.config.host,
+                port: this.config.port,
+                secure: this.config.useStarttls,
+                auth: {
+                    user: this.config.user,
+                    pass: this.config.password,
+                },
+                tls: {
+                    rejectUnauthorized: false,
+                },
+            });
+        }
     }
     async connect() {
         try {
-            await this.transporter.verify();
+            if (this.transporter) {
+                await this.transporter.verify();
+            }
             this.connected = true;
             console.log("SMTP client connected");
         }
@@ -37,7 +44,9 @@ class SmtpClient {
     }
     async disconnect() {
         try {
-            await this.transporter.close();
+            if (this.transporter) {
+                await this.transporter.close();
+            }
             this.connected = false;
             console.log("SMTP client disconnected");
         }
@@ -61,7 +70,10 @@ class SmtpClient {
             inReplyTo: mail.inReplyTo,
             references: mail.references,
         };
-        return await this.transporter.sendMail(options);
+        if (this.transporter) {
+            return await this.transporter.sendMail(options);
+        }
+        return {};
     }
     async replyTo(messageId, content) {
         if (!this.connected) {
@@ -76,7 +88,10 @@ class SmtpClient {
             inReplyTo: messageId,
             references: messageId,
         };
-        return await this.transporter.sendMail(options);
+        if (this.transporter) {
+            return await this.transporter.sendMail(options);
+        }
+        return {};
     }
     async forwardMessage(messageId, toRecipients, content) {
         if (!this.connected) {
@@ -89,7 +104,10 @@ class SmtpClient {
             text: content.text,
             references: messageId,
         };
-        return await this.transporter.sendMail(options);
+        if (this.transporter) {
+            return await this.transporter.sendMail(options);
+        }
+        return {};
     }
     async getConnectionStatus() {
         if (!this.connected) {

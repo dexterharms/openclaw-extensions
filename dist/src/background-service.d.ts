@@ -6,7 +6,7 @@ export declare class BackgroundService {
     private intervalId;
     private isRunning;
     private lastCheckTime;
-    constructor(api: any, config: PluginConfig);
+    constructor(api: any, config: PluginConfig, imapConnection?: any);
     start(): Promise<void>;
     stop(): Promise<void>;
     private scanNewMessages;

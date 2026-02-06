@@ -10,10 +10,10 @@ class BackgroundService {
     intervalId = null;
     isRunning = false;
     lastCheckTime = null;
-    constructor(api, config) {
+    constructor(api, config, imapConnection) {
         this.api = api;
         this.config = config;
-        this.imapClient = new imap_client_1.ImapClient(this.config.imap);
+        this.imapClient = new imap_client_1.ImapClient(this.config.imap, imapConnection);
     }
     async start() {
         if (this.isRunning) {
@@ -107,7 +107,7 @@ class BackgroundService {
             count: 100,
         });
         const cutoffTime = new Date(Date.now() - (hours * 60 * 60 * 1000));
-        return messages.filter(msg => new Date(msg.date) > cutoffTime);
+        return messages.filter((msg) => new Date(msg.date) > cutoffTime);
     }
     async getScannedMessages() {
         const messages = await this.getRecentMessages(24);

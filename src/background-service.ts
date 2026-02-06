@@ -125,7 +125,7 @@ export class BackgroundService {
     });
 
     const cutoffTime = new Date(Date.now() - (hours * 60 * 60 * 1000));
-    return messages.filter(msg => new Date(msg.date) > cutoffTime);
+    return messages.filter((msg: any) => new Date(msg.date) > cutoffTime);
   }
 
   async getScannedMessages(): Promise<any[]> {

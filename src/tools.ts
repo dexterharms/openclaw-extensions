@@ -215,7 +215,7 @@ export function registerSafeMailTools(api: any, config: any, imapClient: ImapCli
 
         const total = messages.length;
         const result = {
-          messages: messages.map((msg) => ({
+          messages: messages.map((msg: any) => ({
             id: msg.id,
             from: msg.from,
             subject: msg.subject,
@@ -262,11 +262,11 @@ export function registerSafeMailTools(api: any, config: any, imapClient: ImapCli
 
         const result = {
           from: message.from,
-          to: message.to.split(",").map((t) => t.trim()),
+          to: message.to.split(",").map((t: string) => t.trim()),
           subject: message.subject,
           date: message.date.toISOString(),
           body: message.body || "",
-          attachments: message.attachments?.map((att) => ({
+          attachments: message.attachments?.map((att: any) => ({
             filename: att.filename,
             contentType: att.contentType,
             size: att.size,
@@ -312,7 +312,7 @@ export function registerSafeMailTools(api: any, config: any, imapClient: ImapCli
           : "";
 
         const mail: MailMessage = {
-          to: message.to.split(",").map((t) => t.trim())[0],
+          to: message.to.split(",").map((t: string) => t.trim())[0],
           subject: `Re: ${message.subject}`,
           text: `${quotedContent}\n\n${params.content}`,
           inReplyTo: params.id,

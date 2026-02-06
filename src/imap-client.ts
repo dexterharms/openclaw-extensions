@@ -26,7 +26,7 @@ export class ImapClient {
 
   constructor(
     private config: ImapConfig,
-    private imapConnection?: IImapConnection
+    imapConnection?: IImapConnection
   ) {
     if (imapConnection) {
       this.client = imapConnection;
