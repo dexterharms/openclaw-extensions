@@ -47,13 +47,13 @@ const background_service_1 = require("./background-service");
     (0, vitest_1.beforeEach)(() => {
         mockImapConnection = {
             connect: vitest_1.vi.fn().mockResolvedValue(undefined),
-            disconnect: vitest_1.vi.fn().mockResolvedValue(undefined),
+            logout: vitest_1.vi.fn().mockResolvedValue(undefined),
             select: vitest_1.vi.fn().mockResolvedValue(undefined),
             list: vitest_1.vi.fn().mockResolvedValue([]),
-            listMessages: vitest_1.vi.fn().mockResolvedValue([]),
-            fetchMessage: vitest_1.vi.fn().mockResolvedValue({}),
-            move: vitest_1.vi.fn().mockResolvedValue(undefined),
-            copy: vitest_1.vi.fn().mockResolvedValue(undefined),
+            fetchAll: vitest_1.vi.fn().mockResolvedValue([]),
+            fetchOne: vitest_1.vi.fn().mockResolvedValue({}),
+            messageMove: vitest_1.vi.fn().mockResolvedValue(undefined),
+            messageCopy: vitest_1.vi.fn().mockResolvedValue(undefined),
             status: vitest_1.vi.fn().mockResolvedValue({
                 attributes: {
                     unread: 0,
@@ -61,6 +61,7 @@ const background_service_1 = require("./background-service");
                     size: 0,
                 },
             }),
+            listMessages: vitest_1.vi.fn().mockResolvedValue([]),
         };
         mockApi = {
             logger: {
@@ -97,33 +98,31 @@ const background_service_1 = require("./background-service");
             // Mock raw IMAP message structure
             const rawMessages = [
                 {
-                    seqNo: 1,
+                    seq: 1,
                     uid: 1,
                     size: 1000,
                     flags: [],
-                    attributes: { date: new Date() },
-                    headers: {
-                        from: { value: [{ address: { address: 'test@example.com' } }] },
-                        to: { value: [{ address: { address: 'recipient@example.com' } }] },
-                        subject: { value: 'Test' },
-                    },
-                    body: { text: 'Test body' },
+                    from: { address: 'test@example.com' },
+                    to: [{ address: 'recipient@example.com' }],
+                    subject: 'Test',
+                    date: new Date(),
+                    text: 'Test body',
+                    attachments: [],
                 },
                 {
-                    seqNo: 2,
+                    seq: 2,
                     uid: 2,
                     size: 1000,
                     flags: [],
-                    attributes: { date: new Date() },
-                    headers: {
-                        from: { value: [{ address: { address: 'test2@example.com' } }] },
-                        to: { value: [{ address: { address: 'recipient@example.com' } }] },
-                        subject: { value: 'Test2' },
-                    },
-                    body: { text: 'Test2 body' },
+                    from: { address: 'test2@example.com' },
+                    to: [{ address: 'recipient@example.com' }],
+                    subject: 'Test2',
+                    date: new Date(),
+                    text: 'Test2 body',
+                    attachments: [],
                 },
             ];
-            mockImapConnection.listMessages.mockResolvedValue(rawMessages);
+            mockImapConnection.fetchAll.mockResolvedValue(rawMessages);
             service = new background_service_1.BackgroundService(mockApi, mockConfig, mockImapConnection);
             await service.start();
             await vitest_1.vi.advanceTimersByTimeAsync(60000);
@@ -133,7 +132,7 @@ const background_service_1 = require("./background-service");
             });
         });
         (0, vitest_1.it)('should not trigger security agent when no new messages', async () => {
-            mockImapConnection.listMessages.mockResolvedValue([]);
+            mockImapConnection.fetchAll.mockResolvedValue([]);
             service = new background_service_1.BackgroundService(mockApi, mockConfig, mockImapConnection);
             await service.start();
             await vitest_1.vi.advanceTimersByTimeAsync(60000);
@@ -141,7 +140,7 @@ const background_service_1 = require("./background-service");
         });
         (0, vitest_1.it)('should handle polling errors gracefully', async () => {
             const messages = [];
-            mockImapConnection.listMessages.mockResolvedValue(messages);
+            mockImapConnection.fetchAll.mockResolvedValue(messages);
             service = new background_service_1.BackgroundService(mockApi, mockConfig, mockImapConnection);
             await service.start();
             await vitest_1.vi.advanceTimersByTimeAsync(60000);
@@ -154,10 +153,10 @@ const background_service_1 = require("./background-service");
             await service.start();
             await service.stop();
             (0, vitest_1.expect)(mockApi.logger.info).toHaveBeenCalledWith('Stopping mail-access background service');
-            (0, vitest_1.expect)(mockImapConnection.disconnect).toHaveBeenCalled();
+            (0, vitest_1.expect)(mockImapConnection.logout).toHaveBeenCalled();
         });
         (0, vitest_1.it)('should handle disconnect errors gracefully', async () => {
-            mockImapConnection.disconnect.mockRejectedValue(new Error('Disconnect failed'));
+            mockImapConnection.logout.mockRejectedValue(new Error('Disconnect failed'));
             service = new background_service_1.BackgroundService(mockApi, mockConfig, mockImapConnection);
             await service.start();
             await service.stop();
@@ -168,20 +167,19 @@ const background_service_1 = require("./background-service");
         (0, vitest_1.it)('should get recent messages from last N hours', async () => {
             const rawMessages = [
                 {
-                    seqNo: 1,
+                    seq: 1,
                     uid: 1,
                     size: 1000,
                     flags: [],
-                    attributes: { date: new Date() },
-                    headers: {
-                        from: { value: [{ address: { address: 'test@example.com' } }] },
-                        to: { value: [{ address: { address: 'recipient@example.com' } }] },
-                        subject: { value: 'Test' },
-                    },
-                    body: { text: 'Test body' },
+                    from: { address: 'test@example.com' },
+                    to: [{ address: 'recipient@example.com' }],
+                    subject: 'Test',
+                    date: new Date(),
+                    text: 'Test body',
+                    attachments: [],
                 },
             ];
-            mockImapConnection.listMessages.mockResolvedValue(rawMessages);
+            mockImapConnection.fetchAll.mockResolvedValue(rawMessages);
             service = new background_service_1.BackgroundService(mockApi, mockConfig, mockImapConnection);
             await service.start();
             const recent = await service.getRecentMessages(24);
@@ -190,7 +188,7 @@ const background_service_1 = require("./background-service");
         });
         (0, vitest_1.it)('should start service if not running', async () => {
             const rawMessages = [];
-            mockImapConnection.listMessages.mockResolvedValue(rawMessages);
+            mockImapConnection.fetchAll.mockResolvedValue(rawMessages);
             service = new background_service_1.BackgroundService(mockApi, mockConfig, mockImapConnection);
             await service.getRecentMessages(24);
             (0, vitest_1.expect)(mockImapConnection.connect).toHaveBeenCalled();
@@ -255,7 +253,7 @@ const background_service_1 = require("./background-service");
                     body: { text: 'Test body' },
                 },
             ];
-            mockImapConnection.listMessages.mockResolvedValue(rawMessages);
+            mockImapConnection.fetchAll.mockResolvedValue(rawMessages);
             service = new background_service_1.BackgroundService(mockApi, mockConfig, mockImapConnection);
             await service.start();
             await vitest_1.vi.advanceTimersByTimeAsync(60000);

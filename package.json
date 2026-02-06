@@ -1,6 +1,6 @@
 {
   "id": "mail-access",
-  "name": "Mail Access",
+  "name": "mail-access",
   "version": "1.0.0",
   "description": "Secure email access plugin with IMAP, SMTP, and security scanning capabilities",
   "author": "OpenClaw",
@@ -42,6 +42,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/anomalyco/opencode"
+    "url": "https://github.com/dexterharms/openclaw-extensions"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
   }
 }

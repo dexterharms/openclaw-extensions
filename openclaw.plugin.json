@@ -1,292 +1,158 @@
 {
-  "plugin": {
-    "id": "mail-access",
-    "name": "Mail Access",
-    "version": "1.0.0",
-    "description": "Secure email access plugin with IMAP, SMTP, and security scanning capabilities for ProtonMail Bridge",
-    "author": "OpenClaw",
-    "license": "MIT",
-    "repository": {
-      "type": "git",
-      "url": "https://github.com/dexterharms/extensions/mail-access.git"
-    },
-    "website": "https://github.com/dexterharms/extensions/mail-access.git",
-    "keywords": [
-      "email",
-      "imap",
-      "smtp",
-      "security",
-      "phishing",
-      "protonmail",
-      "mail-access"
-    ]
-  },
+  "id": "mail-access",
+  "name": "mail-access",
+  "description": "Secure email access plugin with IMAP, SMTP, and security scanning capabilities",
+  "version": "1.0.0",
   "configSchema": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://opencode.ai/plugins/mail-access/config-schema.json",
-    "title": "Mail Access Plugin Configuration",
     "type": "object",
+    "additionalProperties": false,
     "properties": {
       "imap": {
-        "title": "IMAP Configuration",
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "host": {
             "type": "string",
-            "default": "127.0.0.1",
-            "description": "IMAP server host address"
+            "description": "IMAP server host"
           },
           "port": {
             "type": "number",
-            "default": 1143,
-            "description": "IMAP server port (ProtonMail Bridge uses 1143)"
+            "description": "IMAP server port"
           },
           "user": {
             "type": "string",
-            "description": "Email username for authentication"
+            "description": "IMAP username"
           },
           "password": {
             "type": "string",
-            "description": "Email password for authentication (sensitive - will be encrypted)"
+            "description": "IMAP password"
           },
           "useStarttls": {
             "type": "boolean",
-            "default": true,
-            "description": "Use STARTTLS for encryption"
+            "description": "Use STARTTLS for IMAP"
           }
         },
-        "required": ["host", "port", "user", "password"],
-        "uiHint": {
-          "fieldType": "password"
-        }
+        "required": ["host", "port", "user", "password"]
       },
       "smtp": {
-        "title": "SMTP Configuration",
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "host": {
             "type": "string",
-            "default": "127.0.0.1",
-            "description": "SMTP server host address"
+            "description": "SMTP server host"
           },
           "port": {
             "type": "number",
-            "default": 1025,
             "description": "SMTP server port"
           },
           "user": {
             "type": "string",
-            "description": "SMTP username for authentication"
+            "description": "SMTP username"
           },
           "password": {
             "type": "string",
-            "description": "SMTP password for authentication (sensitive - will be encrypted)"
+            "description": "SMTP password"
           },
           "useStarttls": {
             "type": "boolean",
-            "default": true,
-            "description": "Use STARTTLS for encryption"
+            "description": "Use STARTTLS for SMTP"
           },
           "from": {
             "type": "string",
-            "default": "dexter@harms.haus",
-            "description": "Default sender email address"
+            "description": "Default from address"
           }
         },
-        "required": ["host", "port", "user", "password", "from"],
-        "uiHint": {
-          "fieldType": "password"
-        }
+        "required": ["host", "port", "user", "password", "from"]
       },
       "folders": {
-        "title": "Folder Configuration",
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "inbox": {
-            "type": "string",
-            "default": "INBOX",
-            "description": "Default inbox folder name"
+            "type": "string"
           },
           "safeInbox": {
-            "type": "string",
-            "default": "safe",
-            "description": "Folder for safe messages"
+            "type": "string"
           },
           "quarantine": {
-            "type": "string",
-            "default": "quarantine",
-            "description": "Folder for suspicious/dangerous messages"
+            "type": "string"
           },
           "spam": {
-            "type": "string",
-            "default": "Junk",
-            "description": "Spam/junk folder name"
+            "type": "string"
           },
           "trash": {
-            "type": "string",
-            "default": "Trash",
-            "description": "Trash/deleted folder name"
+            "type": "string"
+          }
+        }
+      },
+      "listener": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "pollInterval": {
+            "type": "number"
+          },
+          "useIdle": {
+            "type": "boolean"
           }
         }
       },
       "security": {
-        "title": "Security Configuration",
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "knownSafeSenders": {
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "default": [],
-            "description": "List of trusted sender addresses/domains"
+            }
           },
           "criticalThreats": {
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "default": [
-              "exe",
-              "scr",
-              "bat",
-              "js",
-              "vbs",
-              "ps1",
-              "sh",
-              "jar"
-            ],
-            "description": "Critical threat file extensions to block"
+            }
           },
           "phishingKeywords": {
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "default": [
-              "urgent",
-              "immediate action",
-              "verify account",
-              "password",
-              "security alert",
-              "account compromised",
-              "click here",
-              "update information",
-              "confirm identity",
-              "act now",
-              "limited time"
-            ],
-            "description": "Phishing-related keywords to detect"
+            }
           },
           "attachmentBlacklist": {
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "default": [],
-            "description": "Blacklisted attachment patterns"
+            }
           },
           "linkThreatPatterns": {
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "default": [],
-            "description": "Patterns to detect suspicious links"
+            }
           },
           "credentialRequestPhrases": {
             "type": "array",
             "items": {
               "type": "string"
-            },
-            "default": [
-              "password",
-              "verify account",
-              "update password",
-              "reset password",
-              "account verification",
-              "click to verify",
-              "account with click",
-              "update with click"
-            ],
-            "description": "Phrases that indicate credential theft attempts"
-          }
-        }
-      },
-      "listener": {
-        "title": "Background Listener Configuration",
-        "type": "object",
-        "properties": {
-          "enabled": {
-            "type": "boolean",
-            "default": true,
-            "description": "Enable background email scanning"
-          },
-          "pollInterval": {
-            "type": "number",
-            "default": 60000,
-            "description": "Poll interval in milliseconds"
-          },
-          "useIdle": {
-            "type": "boolean",
-            "default": false,
-            "description": "Use IMAP IDLE for real-time updates"
+            }
           }
         }
       },
       "notifications": {
-        "title": "Notification Configuration",
         "type": "object",
+        "additionalProperties": false,
         "properties": {
-          "alertAgent": {
-            "type": "string",
-            "description": "Agent to notify for security alerts"
-          },
-          "quarantineReportTo": {
-            "type": "string",
-            "description": "Email address to send quarantine reports to"
+          "enabled": {
+            "type": "boolean"
           }
         }
       }
     },
-    "required": [
-      "imap.host",
-      "imap.port",
-      "imap.user",
-      "imap.password"
-    ]
-  },
-  "uiHints": {
-    "tabs": [
-      {
-        "tabName": "IMAP Settings",
-        "fields": ["imap.host", "imap.port", "imap.user", "imap.password", "imap.useStarttls"]
-      },
-      {
-        "tabName": "SMTP Settings",
-        "fields": ["smtp.host", "smtp.port", "smtp.user", "smtp.password", "smtp.useStarttls", "smtp.from"]
-      },
-      {
-        "tabName": "Folders",
-        "fields": ["folders.inbox", "folders.safeInbox", "folders.quarantine", "folders.spam", "folders.trash"]
-      },
-      {
-        "tabName": "Security",
-        "fields": ["security.knownSafeSenders", "security.criticalThreats", "security.phishingKeywords", "security.attachmentBlacklist", "security.linkThreatPatterns", "security.credentialRequestPhrases"]
-      },
-      {
-        "tabName": "Listener",
-        "fields": ["listener.enabled", "listener.pollInterval", "listener.useIdle"]
-      },
-      {
-        "tabName": "Notifications",
-        "fields": ["notifications.alertAgent", "notifications.quarantineReportTo"]
-      }
-    ]
-  },
-  "hooks": {
-    "onLoad": "index.ts",
-    "onUnload": "index.ts"
-  },
-  "apiCompatibility": "1.0.0"
+    "required": ["imap", "smtp", "folders", "listener", "security"]
+  }
 }

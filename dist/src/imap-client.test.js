@@ -15,13 +15,24 @@ const imap_client_1 = require("./imap-client");
     (0, vitest_1.beforeEach)(() => {
         mockConnection = {
             connect: vitest_1.vi.fn().mockResolvedValue(undefined),
-            disconnect: vitest_1.vi.fn().mockResolvedValue(undefined),
+            logout: vitest_1.vi.fn().mockResolvedValue(undefined),
             select: vitest_1.vi.fn().mockResolvedValue(undefined),
             list: vitest_1.vi.fn().mockResolvedValue([]),
-            listMessages: vitest_1.vi.fn().mockResolvedValue([]),
-            fetchMessage: vitest_1.vi.fn().mockResolvedValue({}),
-            move: vitest_1.vi.fn().mockResolvedValue(undefined),
-            copy: vitest_1.vi.fn().mockResolvedValue(undefined),
+            fetchAll: vitest_1.vi.fn().mockResolvedValue([]),
+            fetchOne: vitest_1.vi.fn().mockResolvedValue({
+                seq: 1,
+                uid: 123,
+                subject: 'Test Subject',
+                from: { address: 'test@example.com' },
+                to: [{ address: 'recipient@example.com' }],
+                date: new Date(),
+                size: 1024,
+                flags: [],
+                text: 'Test body',
+                attachments: [],
+            }),
+            messageMove: vitest_1.vi.fn().mockResolvedValue(undefined),
+            messageCopy: vitest_1.vi.fn().mockResolvedValue(undefined),
             status: vitest_1.vi.fn().mockResolvedValue({
                 attributes: {
                     unread: 0,
@@ -29,6 +40,7 @@ const imap_client_1 = require("./imap-client");
                     size: 0,
                 },
             }),
+            listMessages: vitest_1.vi.fn().mockResolvedValue([]),
         };
         imapClient = new imap_client_1.ImapClient(mockConfig, mockConnection);
     });
@@ -49,10 +61,10 @@ const imap_client_1 = require("./imap-client");
     (0, vitest_1.describe)('disconnect', () => {
         (0, vitest_1.it)('should disconnect from IMAP server', async () => {
             await imapClient.disconnect();
-            (0, vitest_1.expect)(mockConnection.disconnect).toHaveBeenCalled();
+            (0, vitest_1.expect)(mockConnection.logout).toHaveBeenCalled();
         });
         (0, vitest_1.it)('should handle disconnection errors', async () => {
-            mockConnection.disconnect.mockRejectedValue(new Error('Disconnect failed'));
+            mockConnection.logout.mockRejectedValue(new Error('Disconnect failed'));
             await (0, vitest_1.expect)(imapClient.disconnect()).rejects.toThrow('Disconnect failed');
         });
         (0, vitest_1.it)('should set connected flag to false after disconnect', async () => {
@@ -99,101 +111,98 @@ const imap_client_1 = require("./imap-client");
         (0, vitest_1.it)('should fetch messages with default options', async () => {
             const mockMessages = [
                 {
-                    seqNo: 1,
+                    seq: 1,
                     uid: 1,
-                    headers: {
-                        from: { value: [{ address: { address: 'test@example.com' } }] },
-                        to: { value: [{ address: { address: 'recipient@example.com' } }] },
-                        subject: { value: 'Test Subject' },
-                    },
-                    attributes: { date: Date.now() },
-                    body: { text: 'Test body content' },
-                    flags: [],
+                    subject: 'Test Subject',
+                    from: { address: 'test@example.com' },
+                    to: [{ address: 'recipient@example.com' }],
+                    date: new Date(),
                     size: 100,
-                    parts: [],
+                    flags: [],
+                    text: 'Test body content',
+                    attachments: [],
                 },
             ];
-            mockConnection.listMessages.mockResolvedValue(mockMessages);
+            mockConnection.fetchAll.mockResolvedValue(mockMessages);
             const messages = await imapClient.getMessages({});
-            (0, vitest_1.expect)(mockConnection.listMessages).toHaveBeenCalledWith([], {
-                markSeen: false,
-                uid: true,
-                bodyParts: ['HEADER.FIELDS (FROM TO SUBJECT DATE)', 'TEXT'],
+            (0, vitest_1.expect)(mockConnection.fetchAll).toHaveBeenCalledWith({}, {
+                source: {
+                    headers: ['from', 'to', 'cc', 'bcc', 'subject', 'date'],
+                    bodyParts: ['text'],
+                },
             });
             (0, vitest_1.expect)(messages).toHaveLength(1);
             (0, vitest_1.expect)(messages[0].subject).toBe('Test Subject');
         });
         (0, vitest_1.it)('should apply filter parameter', async () => {
-            mockConnection.listMessages.mockResolvedValue([]);
+            mockConnection.fetchAll.mockResolvedValue([]);
             await imapClient.getMessages({ filter: 'unread' });
-            (0, vitest_1.expect)(mockConnection.listMessages).toHaveBeenCalledWith([{ seen: false }], vitest_1.expect.any(Object));
+            (0, vitest_1.expect)(mockConnection.fetchAll).toHaveBeenCalledWith({ seen: false }, vitest_1.expect.any(Object));
         });
         (0, vitest_1.it)('should apply search phrase parameter', async () => {
-            mockConnection.listMessages.mockResolvedValue([]);
+            mockConnection.fetchAll.mockResolvedValue([]);
             await imapClient.getMessages({ searchPhrase: 'important' });
-            (0, vitest_1.expect)(mockConnection.listMessages).toHaveBeenCalledWith([{ subject: 'important' }], vitest_1.expect.any(Object));
+            (0, vitest_1.expect)(mockConnection.fetchAll).toHaveBeenCalledWith({ subject: 'important' }, vitest_1.expect.any(Object));
         });
         (0, vitest_1.it)('should handle IMAP errors', async () => {
-            mockConnection.listMessages.mockRejectedValue(new Error('IMAP error'));
+            mockConnection.fetchAll.mockRejectedValue(new Error('IMAP error'));
             await (0, vitest_1.expect)(imapClient.getMessages({})).rejects.toThrow('IMAP error');
         });
         (0, vitest_1.it)('should apply count and offset parameters', async () => {
-            mockConnection.listMessages.mockResolvedValue([]);
+            mockConnection.fetchAll.mockResolvedValue([]);
             await imapClient.getMessages({ count: 20, offset: 5 });
-            (0, vitest_1.expect)(mockConnection.listMessages).toHaveBeenCalled();
+            (0, vitest_1.expect)(mockConnection.fetchAll).toHaveBeenCalled();
         });
     });
     (0, vitest_1.describe)('getMessage', () => {
         (0, vitest_1.it)('should fetch a single message by ID', async () => {
             const mockMessage = {
-                seqNo: 123,
+                seq: 123,
                 uid: 123,
-                headers: {
-                    from: { value: [{ address: { address: 'test@example.com' } }] },
-                    to: { value: [{ address: { address: 'recipient@example.com' } }] },
-                    subject: { value: 'Test Subject' },
-                },
-                attributes: { date: Date.now() },
-                body: { text: 'Test body content' },
-                flags: [],
+                from: { address: 'test@example.com' },
+                to: [{ address: 'recipient@example.com' }],
+                subject: 'Test Subject',
+                date: new Date(),
                 size: 100,
-                parts: [],
+                flags: [],
+                text: 'Test body content',
+                attachments: [],
             };
-            mockConnection.fetchMessage.mockResolvedValue(mockMessage);
+            mockConnection.fetchOne.mockResolvedValue(mockMessage);
             const message = await imapClient.getMessage('123');
-            (0, vitest_1.expect)(mockConnection.fetchMessage).toHaveBeenCalledWith('123', vitest_1.expect.any(Object));
+            (0, vitest_1.expect)(mockConnection.fetchOne).toHaveBeenCalledWith('123', vitest_1.expect.any(Object));
             (0, vitest_1.expect)(message.subject).toBe('Test Subject');
         });
         (0, vitest_1.it)('should handle message fetch errors', async () => {
-            mockConnection.fetchMessage.mockRejectedValue(new Error('Message not found'));
+            mockConnection.fetchOne.mockRejectedValue(new Error('Message not found'));
             await (0, vitest_1.expect)(imapClient.getMessage('123')).rejects.toThrow('Message not found');
         });
     });
     (0, vitest_1.describe)('moveMessage', () => {
         (0, vitest_1.it)('should move message to folder', async () => {
             await imapClient.moveMessage('123', 'Archive');
-            (0, vitest_1.expect)(mockConnection.move).toHaveBeenCalledWith({ seqNo: 123 }, 'Archive');
+            (0, vitest_1.expect)(mockConnection.messageMove).toHaveBeenCalledWith('123', 'Archive');
         });
         (0, vitest_1.it)('should connect if not connected', async () => {
             await imapClient.moveMessage('123', 'Archive');
             (0, vitest_1.expect)(mockConnection.connect).toHaveBeenCalled();
         });
         (0, vitest_1.it)('should handle move errors', async () => {
-            mockConnection.move.mockRejectedValue(new Error('Move failed'));
+            mockConnection.messageMove.mockRejectedValue(new Error('Move failed'));
             await (0, vitest_1.expect)(imapClient.moveMessage('123', 'Archive')).rejects.toThrow('Move failed');
         });
     });
     (0, vitest_1.describe)('copyMessage', () => {
         (0, vitest_1.it)('should copy message to folder', async () => {
             await imapClient.copyMessage('123', 'Archive');
-            (0, vitest_1.expect)(mockConnection.copy).toHaveBeenCalledWith({ seqNo: 123 }, 'Archive');
+            (0, vitest_1.expect)(mockConnection.messageCopy).toHaveBeenCalledWith('123', 'Archive');
         });
         (0, vitest_1.it)('should connect if not connected', async () => {
             await imapClient.copyMessage('123', 'Archive');
             (0, vitest_1.expect)(mockConnection.connect).toHaveBeenCalled();
         });
         (0, vitest_1.it)('should handle copy errors', async () => {
-            mockConnection.copy.mockRejectedValue(new Error('Copy failed'));
+            mockConnection.messageCopy.mockRejectedValue(new Error('Copy failed'));
             await (0, vitest_1.expect)(imapClient.copyMessage('123', 'Archive')).rejects.toThrow('Copy failed');
         });
     });

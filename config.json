@@ -1,0 +1,76 @@
+{
+  "imap": {
+    "host": "127.0.0.1",
+    "port": 1143,
+    "user": "dexterharmshaus@proton.me",
+    "password": "8UtQ9WJ3hW5MzrDz",
+    "useStarttls": true
+  },
+  "smtp": {
+    "host": "127.0.0.1",
+    "port": 1025,
+    "user": "dexterharmshaus@proton.me",
+    "password": "8UtQ9WJ3hW5MzrDz",
+    "useStarttls": true,
+    "from": "dexter@harms.haus"
+  },
+  "folders": {
+    "inbox": "INBOX",
+    "safeInbox": "Safe-Inbox",
+    "quarantine": "Quarantine",
+    "spam": "Spam",
+    "trash": "Trash"
+  },
+  "listener": {
+    "enabled": true,
+    "pollInterval": 60000,
+    "useIdle": false
+  },
+  "security": {
+    "knownSafeSenders": [
+      "blake@harms.haus",
+      "erin@harms.haus"
+    ],
+    "criticalThreats": [
+      "virus",
+      "malware",
+      "trojan",
+      "ransomware"
+    ],
+    "phishingKeywords": [
+      "verify your account",
+      "urgent action required",
+      "your account will be suspended",
+      "click here immediately",
+      "confirm your identity",
+      "security alert",
+      "unusual activity detected"
+    ],
+    "attachmentBlacklist": [
+      ".exe",
+      ".bat",
+      ".cmd",
+      ".com",
+      ".pif",
+      ".scr",
+      ".vbs",
+      ".js",
+      ".jar"
+    ],
+    "linkThreatPatterns": [
+      "\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b",
+      "bit\\.ly",
+      "tinyurl\\.com",
+      "goo\\.gl"
+    ],
+    "credentialRequestPhrases": [
+      "enter your password",
+      "provide your credentials",
+      "confirm your login details",
+      "verify your information"
+    ]
+  },
+  "notifications": {
+    "enabled": false
+  }
+}

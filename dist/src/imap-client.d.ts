@@ -7,14 +7,15 @@ export interface ImapConfig {
 }
 export interface IImapConnection {
     connect(): Promise<void>;
-    disconnect(): Promise<void>;
+    logout(): Promise<void>;
     select(folder: string): Promise<void>;
     list(): Promise<any[]>;
-    listMessages(criteria: any[], options: any): Promise<any[]>;
-    fetchMessage(id: string, options: any): Promise<any>;
-    move(selector: any, destination: string): Promise<void>;
-    copy(selector: any, destination: string): Promise<void>;
+    fetchAll(criteria: any, options: any): Promise<any[]>;
+    fetchOne(id: string, options: any): Promise<any>;
+    messageMove(selector: any, destination: string): Promise<void>;
+    messageCopy(selector: any, destination: string): Promise<void>;
     status(folder: string, options: any): Promise<any>;
+    listMessages(criteria: any[], options: any): Promise<any[]>;
 }
 export declare class ImapClient {
     private config;
